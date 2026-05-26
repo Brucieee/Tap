@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       if (remoteUrl.includes('browserless.io') && !remoteUrl.includes('/playwright') && !remoteUrl.includes('/chromium')) {
         try {
           const urlObj = new URL(remoteUrl);
-          urlObj.pathname = '/playwright';
+          urlObj.pathname = '/chromium/playwright';
           formattedUrl = urlObj.toString();
           console.log(`Auto-formatted Browserless.io URL to: ${formattedUrl}`);
         } catch (urlErr) {
