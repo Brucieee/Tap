@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { createClient } from '@/utils/supabase/server';
 import { decrypt } from '@/utils/encryption';
-import { chromium } from 'playwright';
 
 // Force dynamic execution for API routes that fetch fresh database records
 export const dynamic = 'force-dynamic';
@@ -109,6 +108,17 @@ export async function GET(request: NextRequest) {
 
     // 2. Launch browser (Remote CDP on Vercel if URL is provided, otherwise local headless Chromium)
     const remoteUrl = process.env.PLAYWRIGHT_SERVICE_URL;
+    
+    // Dynamic import to prevent top-level cold-start bundler crashes on Vercel
+    let playwright;
+    try {
+      playwright = await import('playwright-core');
+    } catch (err) {
+      console.log('playwright-core not found, falling back to playwright...', err);
+      playwright = await import('playwright');
+    }
+
+    const { chromium } = playwright;
     let browser;
     if (remoteUrl) {
       console.log(`Connecting to remote Playwright browser service at: ${remoteUrl}`);
