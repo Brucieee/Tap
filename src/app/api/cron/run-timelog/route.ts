@@ -125,6 +125,15 @@ export async function GET(request: NextRequest) {
     // 2. Launch browser (Remote CDP on Vercel if URL is provided, otherwise local headless Chromium)
     const remoteUrl = process.env.PLAYWRIGHT_SERVICE_URL;
     
+    // Test browserless reachability
+    try {
+      console.log('Testing Browserless API reachability via fetch...');
+      const testRes = await fetch('https://chrome.browserless.io/status');
+      console.log('Browserless status response code:', testRes.status);
+    } catch (fetchErr: any) {
+      console.error('Browserless API fetch check failed:', fetchErr.message);
+    }
+
     // Dynamic import to prevent top-level cold-start bundler crashes on Vercel
     let playwright;
     try {
@@ -153,15 +162,18 @@ export async function GET(request: NextRequest) {
       console.log(`Connecting to remote Playwright browser service...`);
       try {
         if (formattedUrl.includes('/playwright')) {
+          console.log('Connecting via Playwright native chromium.connect...');
           browser = await chromium.connect({ 
             wsEndpoint: formattedUrl,
             timeout: 15000
           });
         } else {
+          console.log('Connecting via CDP chromium.connectOverCDP...');
           browser = await chromium.connectOverCDP(formattedUrl, {
             timeout: 15000
           });
         }
+        console.log('Successfully established connection to Playwright Remote Browser!');
       } catch (connErr: any) {
         console.error(`Browser connection failed:`, connErr);
         throw new Error(`Failed to connect to remote Playwright service: ${connErr.message}`);
