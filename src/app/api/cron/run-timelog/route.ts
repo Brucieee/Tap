@@ -5,6 +5,7 @@ import { decrypt } from '@/utils/encryption';
 
 // Force dynamic execution for API routes that fetch fresh database records
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Extend serverless execution duration up to 60 seconds (Hobby plan supports up to 300s!)
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -152,9 +153,14 @@ export async function GET(request: NextRequest) {
       console.log(`Connecting to remote Playwright browser service...`);
       try {
         if (formattedUrl.includes('/playwright')) {
-          browser = await chromium.connect({ wsEndpoint: formattedUrl });
+          browser = await chromium.connect({ 
+            wsEndpoint: formattedUrl,
+            timeout: 15000
+          });
         } else {
-          browser = await chromium.connectOverCDP(formattedUrl);
+          browser = await chromium.connectOverCDP(formattedUrl, {
+            timeout: 15000
+          });
         }
       } catch (connErr: any) {
         console.error(`Browser connection failed:`, connErr);
