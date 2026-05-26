@@ -288,10 +288,18 @@ body {
   box-shadow: 0 4px 20px rgba(0,0,0,0.02);
 }
 
+.header-email-desktop {
+  display: block;
+}
+
 /* Premium Mobile Responsive overrides */
 @media (max-width: 640px) {
   body {
     background-color: #f5f6fa;
+  }
+  
+  .header-email-desktop {
+    display: none !important;
   }
   
   .ui-card {
@@ -336,4 +344,19 @@ body {
     scale: 0.9;
   }
 }
+
+.btn-signout {
+  color: var(--text-muted) !important;
+  border: 1px solid var(--input-border) !important;
+  background-color: transparent !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+.btn-signout:hover {
+  color: #ef4444 !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  background-color: rgba(239, 68, 68, 0.05) !important;
+}
+
+
 

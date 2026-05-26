@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/utils/supabase/admin';
+import { createClient } from '@/utils/supabase/server';
 import { decrypt } from '@/utils/encryption';
 import { chromium } from 'playwright';
 
@@ -10,7 +11,8 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   
   // Security check: Verify a cron secret token to prevent unauthorized triggers
-  const cronSecret = searchParams.get('secret');
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = searchParams.get('secret') || (authHeader ? authHeader.replace('Bearer ', '') : null);
   const expectedSecret = process.env.CRON_SECRET;
   
   if (expectedSecret && cronSecret !== expectedSecret) {
@@ -46,18 +48,52 @@ export async function GET(request: NextRequest) {
     message: string;
   }> = [];
 
-  const supabase = createAdminClient();
+  // Try to authenticate using the user's standard session cookies if triggered from the dashboard sandbox
+  let supabase;
+  let isUserSession = false;
+  try {
+    const userClient = await createClient();
+    const { data: { user } } = await userClient.auth.getUser();
+    if (user) {
+      supabase = userClient;
+      isUserSession = true;
+      console.log(`[Sandbox Execution] Found authenticated user session for ID: ${user.id}`);
+    }
+  } catch (cookieErr) {
+    console.log('No user session cookies found, proceeding to use admin client.');
+  }
+
+  if (!supabase) {
+    supabase = createAdminClient();
+  }
 
   try {
-    // 1. Fetch all users with automation enabled
-    const { data: profiles, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('is_automation_enabled', true);
+    // Fetch profiles
+    let profiles;
+    let dbError;
 
-    if (error) {
-      console.error('Failed to fetch user profiles:', error);
-      return NextResponse.json({ error: 'Database query failed', details: error.message }, { status: 500 });
+    if (isUserSession) {
+      // Manual/Sandbox run: Fetch only this user's profile
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', user?.id);
+      profiles = data;
+      dbError = error;
+    } else {
+      // Automated Cron Job: Fetch all active profiles
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('is_automation_enabled', true);
+      profiles = data;
+      dbError = error;
+    }
+
+    if (dbError) {
+      console.error('Failed to fetch user profiles:', dbError);
+      return NextResponse.json({ error: 'Database query failed', details: dbError.message }, { status: 500 });
     }
 
     if (!profiles || profiles.length === 0) {
@@ -71,13 +107,19 @@ export async function GET(request: NextRequest) {
     console.log(`[Cron Job Started] Mode: ${modeText} | Day: ${currentDay} | Date: ${currentDate}`);
     console.log(`Found ${profiles.length} active automation profiles. Evaluating schedules...`);
 
-    // 2. Launch headless browser
-    // Set headless: true for production serverless execution.
-    // Allow launching with specific arguments for reliability in server environments.
-    const browser = await chromium.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-    });
+    // 2. Launch browser (Remote CDP on Vercel if URL is provided, otherwise local headless Chromium)
+    const remoteUrl = process.env.PLAYWRIGHT_SERVICE_URL;
+    let browser;
+    if (remoteUrl) {
+      console.log(`Connecting to remote Playwright browser service at: ${remoteUrl}`);
+      browser = await chromium.connectOverCDP(remoteUrl);
+    } else {
+      console.log('Launching local Chromium browser...');
+      browser = await chromium.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      });
+    }
 
     // 3. Process each profile
     for (const profile of profiles) {
@@ -98,11 +140,12 @@ export async function GET(request: NextRequest) {
       }
 
       // Check WFH schedule match
+      // Skip this check if running manually triggered test from the dashboard
+      const isManualTest = searchParams.get('test') === 'true' || isUserSession;
       const wfhDays = profile.wfh_days || [];
-      // Support flexible casing (e.g. 'monday' vs 'Monday')
       const isWfhDay = wfhDays.some((day: string) => day.toLowerCase() === currentDay.toLowerCase());
 
-      if (!isWfhDay) {
+      if (!isWfhDay && !isManualTest) {
         results.push({
           userId,
           employeeId: 'Configured',
@@ -141,67 +184,77 @@ export async function GET(request: NextRequest) {
         const page = await context.newPage();
 
         // 1. Login Page Execution
-        const loginUrl = process.env.COMPANY_PORTAL_LOGIN_URL || 'https://portal.company.com/login';
+        const loginUrl = process.env.COMPANY_PORTAL_LOGIN_URL || 'https://timelog.cocogen.com.ph/Login';
         console.log(`Navigating to login portal: ${loginUrl}`);
         await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 30000 });
 
         // Fill out credentials
-        // Use standard selectors and robust fallbacks (inputs by name, id, placeholder)
-        await page.fill('input[name="employee_id"], #employee_id, input[placeholder*="Employee ID"]', decryptedEmployeeId);
-        await page.fill('input[type="password"], #company_password, input[name="password"]', decryptedPassword);
+        await page.fill('input[name="ctl00$ContentPlaceHolder1$Login1$UserName"], #ctl00_ContentPlaceHolder1_Login1_UserName', decryptedEmployeeId);
+        await page.fill('input[name="ctl00$ContentPlaceHolder1$Login1$Password"], #ctl00_ContentPlaceHolder1_Login1_Password', decryptedPassword);
         
         // Submit Login Form
+        console.log('Submitting credentials form...');
         await Promise.all([
-          page.click('button[type="submit"], #login-btn, button:has-text("Login")'),
-          page.waitForURL(/dashboard|home|index|portal/i, { timeout: 15000 }).catch(() => {
-            console.log('Explicit redirect URL not matched, proceeding with current page state');
+          page.click('input[name="ctl00$ContentPlaceHolder1$Login1$LoginButton"], #ctl00_ContentPlaceHolder1_Login1_LoginButton'),
+          page.waitForNavigation({ waitUntil: 'networkidle', timeout: 20000 }).catch(() => {
+            console.log('Navigation wait timed out or bypassed, continuing flow...');
           })
         ]);
 
-        console.log('Login form submitted. Navigating to Add Timelog...');
+        console.log('Logged in successfully. Waiting for dashboard state...');
 
-        // 2. Navigate to Timelog form page
-        const timelogUrl = process.env.COMPANY_PORTAL_TIMELOG_URL || 'https://portal.company.com/timelog/add';
-        await page.goto(timelogUrl, { waitUntil: 'networkidle', timeout: 20000 });
+        // 2. Click "Add New" button to open/render the timelog submission form
+        const addNewBtn = 'input[name="ctl00$ContentPlaceHolder1$Button1"][value="Add New"], #ctl00_ContentPlaceHolder1_Button1';
+        console.log('Locating and clicking "Add New" timelog form button...');
+        await page.waitForSelector(addNewBtn, { timeout: 15000 });
+        await page.click(addNewBtn);
 
         // 3. Inject Form Fields
-        console.log(`Injecting form: Date=${currentDate}, Time=${timeToInject}, Mode=${modeText}`);
-        
-        // Type: "Addition"
-        // Select by dropdown value or text
-        const typeSelect = 'select[name="type"], select#type, select[placeholder*="Type"]';
-        await page.waitForSelector(typeSelect, { timeout: 5000 });
-        await page.selectOption(typeSelect, { label: 'Addition' });
+        // Wait for the update panel/form fields to load
+        const typeSelect = 'select[name="ctl00$ContentPlaceHolder1$drp_type"], #ctl00_ContentPlaceHolder1_drp_type';
+        await page.waitForSelector(typeSelect, { timeout: 15000 });
 
-        // Date: Calendar Date (YYYY-MM-DD)
-        const dateInput = 'input[type="date"], input[name="date"], input#date';
-        await page.fill(dateInput, currentDate);
+        // Format Date: Convert YYYY-MM-DD to MM/DD/YYYY
+        const [year, month, day] = currentDate.split('-');
+        const formattedDate = `${month}/${day}/${year}`;
+        console.log(`Injecting form variables: Date=${formattedDate}, Time=${timeToInject}, Mode=${modeText}`);
 
-        // Timelog: Specific time stamp (login_time or logout_time)
-        const timeInput = 'input[type="time"], input[name="time"], input#time';
-        // HTML time inputs accept hh:mm or hh:mm:ss format
-        const formattedTime = timeToInject.substring(0, 5); // Take 'hh:mm'
+        // Type: "Correction"
+        await page.selectOption(typeSelect, { value: 'C' }); // 'C' represents "Correction"
+
+        // Date 1 (Main date field)
+        const dateInput1 = 'input[name="ctl00$ContentPlaceHolder1$txt_date1"], #ctl00_ContentPlaceHolder1_txt_date1';
+        await page.fill(dateInput1, formattedDate);
+
+        // Date 2 (Timelog date field)
+        const dateInput2 = 'input[name="ctl00$ContentPlaceHolder1$txt_date2"], #ctl00_ContentPlaceHolder1_txt_date2';
+        await page.fill(dateInput2, formattedDate);
+
+        // Time Input
+        const timeInput = 'input[name="ctl00$ContentPlaceHolder1$txtTime"], #ctl00_ContentPlaceHolder1_txtTime';
+        const formattedTime = timeToInject.substring(0, 5); // 'hh:mm'
         await page.fill(timeInput, formattedTime);
 
-        // Mode: "Log In" or "Log Out"
-        const modeSelect = 'select[name="mode"], select#mode';
-        await page.selectOption(modeSelect, { label: modeText });
+        // Mode: 'I' for Log In, 'O' for Log Out
+        const modeSelect = 'select[name="ctl00$ContentPlaceHolder1$drp_mode"], #ctl00_ContentPlaceHolder1_drp_mode';
+        const modeValue = modeParam === 'login' ? 'I' : 'O';
+        await page.selectOption(modeSelect, { value: modeValue });
 
-        // Reason: "Work from home"
-        const reasonTextarea = 'textarea[name="reason"], textarea#reason';
-        await page.fill(reasonTextarea, 'Work from home');
+        // Reason: Dynamic WFH Reason from profile settings
+        const reasonTextarea = 'textarea[name="ctl00$ContentPlaceHolder1$txt_reason"], #ctl00_ContentPlaceHolder1_txt_reason';
+        await page.fill(reasonTextarea, profile.wfh_reason || 'Work from home');
 
-        // Approver: "SALVADOR, JOEL PAOLO  C."
-        const approverSelect = 'select[name="approver"], select#approver';
-        await page.selectOption(approverSelect, { label: 'SALVADOR, JOEL PAOLO  C.' });
+        // Approver: "SALVADOR, JOEL PAOLO C."
+        const approverSelect = 'select[name="ctl00$ContentPlaceHolder1$drp_approver"], #ctl00_ContentPlaceHolder1_drp_approver';
+        await page.selectOption(approverSelect, { value: '200001808' });
 
         // 4. Click Submit Button
         console.log('Submitting the timelog form...');
-        const submitBtn = 'button[type="submit"], button#submit-timelog, button:has-text("Submit")';
+        const submitBtn = 'input[name="ctl00$ContentPlaceHolder1$Button1"][value="Submit"]';
         await page.click(submitBtn);
 
-        // Optional: Wait for success confirmation (message, toast, redirects, etc.)
-        await page.waitForTimeout(2000); 
+        // Wait for page postback/completion to register
+        await page.waitForTimeout(3000); 
 
         console.log(`Timelog ${modeText} submission completed successfully for user ${userId}.`);
 

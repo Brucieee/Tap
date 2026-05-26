@@ -32,7 +32,8 @@ export default function DashboardPage() {
     wfh_days: [] as string[],
     login_time: '08:00',
     logout_time: '17:00',
-    is_automation_enabled: true
+    is_automation_enabled: true,
+    wfh_reason: 'Work from home'
   });
   
   const [userEmail, setUserEmail] = useState('');
@@ -43,6 +44,7 @@ export default function DashboardPage() {
   const [testLogs, setTestLogs] = useState<string[]>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [hasPasswordStored, setHasPasswordStored] = useState(false);
+  const [isLocked, setIsLocked] = useState(true);
 
   const router = useRouter();
   const supabase = createClient();
@@ -69,6 +71,7 @@ export default function DashboardPage() {
 
           const passwordPresent = !!data.company_password;
           setHasPasswordStored(passwordPresent);
+          setIsLocked(passwordPresent);
 
           setProfile({
             employee_id: data.employee_id || '',
@@ -76,7 +79,8 @@ export default function DashboardPage() {
             wfh_days: data.wfh_days || [],
             login_time: cleanLoginTime,
             logout_time: cleanLogoutTime,
-            is_automation_enabled: data.is_automation_enabled !== undefined ? data.is_automation_enabled : true
+            is_automation_enabled: data.is_automation_enabled !== undefined ? data.is_automation_enabled : true,
+            wfh_reason: data.wfh_reason || 'Work from home'
           });
         }
       } catch (error) {
@@ -126,12 +130,14 @@ export default function DashboardPage() {
           wfh_days: profile.wfh_days,
           login_time: `${profile.login_time}:00`,
           logout_time: `${profile.logout_time}:00`,
-          is_automation_enabled: profile.is_automation_enabled
+          is_automation_enabled: profile.is_automation_enabled,
+          wfh_reason: profile.wfh_reason
         }),
       });
 
       if (response.ok) {
-        setMessage({ text: 'Configuration saved and encrypted successfully!', type: 'success' });
+        setMessage({ text: 'Configuration saved successfully!', type: 'success' });
+        setIsLocked(true);
         if (profile.company_password && profile.company_password !== '__PRESERVED_PASSWORD__') {
           setHasPasswordStored(true);
           setProfile(prev => ({ ...prev, company_password: '__PRESERVED_PASSWORD__' }));
@@ -174,7 +180,7 @@ export default function DashboardPage() {
 
       setTestLogs(prev => [...prev, `[System] Querying local Playwright route at: /api/cron/run-timelog`]);
 
-      const response = await fetch(`/api/cron/run-timelog?mode=${testMode}&day=${currentDay}&date=${currentFormattedDate}`);
+      const response = await fetch(`/api/cron/run-timelog?mode=${testMode}&day=${currentDay}&date=${currentFormattedDate}&test=true`);
       const data = await response.json();
 
       if (response.ok) {
@@ -237,49 +243,7 @@ export default function DashboardPage() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-      {/* Top Header Navigation */}
-      <header className="header-ui" style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-        padding: '0.85rem 2rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>Tap</h2>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Automated WFH Timelogs</span>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500 }}>{userEmail}</p>
-          </div>
-          <button 
-            id="sign-out-btn" 
-            onClick={handleSignOut} 
-            className="btn-ui-secondary" 
-            style={{
-              padding: '0.45rem 1rem',
-              fontSize: '0.8rem',
-              borderRadius: '999px',
-              width: 'auto',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              color: '#ef4444',
-              borderColor: 'rgba(239, 68, 68, 0.4)'
-            }}
-          >
-            <LogOut style={{ width: '14px', height: '14px' }} />
-            Sign Out
-          </button>
-        </div>
-      </header>
-
+      
       {/* Main Grid Content */}
       <main style={{
         flex: 1,
@@ -292,33 +256,71 @@ export default function DashboardPage() {
         gap: '2.25rem'
       }}>
         
+        {/* Seamless Header Row */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingBottom: '0.5rem',
+          borderBottom: '1px solid rgba(226, 232, 240, 0.5)'
+        }}>
+          <div>
+            <h2 style={{ fontSize: '1.85rem', fontWeight: 800, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', letterSpacing: '-0.02em', margin: 0 }}>Tap</h2>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Automated WFH Timelogs</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div className="header-email-desktop" style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500, margin: 0 }}>{userEmail}</p>
+            </div>
+            <button 
+              id="sign-out-btn" 
+              onClick={handleSignOut} 
+              className="btn-ui-secondary btn-signout" 
+              style={{
+                padding: '0.45rem 1rem',
+                fontSize: '0.8rem',
+                borderRadius: '999px',
+                width: 'auto',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                fontWeight: 500,
+                cursor: 'pointer'
+              }}
+            >
+              <LogOut style={{ width: '14px', height: '14px' }} />
+              Sign Out
+            </button>
+          </div>
+        </div>
+        
         {/* Main Controls Form */}
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '2.25rem' }}>
           
           {/* 1. Header Control Panel Card */}
           <div className="ui-card" style={{
             maxWidth: '100%',
-            padding: '2rem',
+            padding: '1.25rem 1.5rem',
             display: 'flex',
-            flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '1.5rem',
+            gap: '1rem',
           }}>
             <div>
-              <h3 style={{ fontSize: '1.3rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>
-                Automation Control Center
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>
+                Automation Control
               </h3>
             </div>
 
             {/* Toggle Switch */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span style={{ 
-                fontSize: '0.9rem', 
+                fontSize: '0.85rem', 
                 fontWeight: 600, 
                 color: profile.is_automation_enabled ? 'var(--accent-blue)' : 'var(--text-muted)' 
               }}>
-                {profile.is_automation_enabled ? 'Automation ACTIVE' : 'Automation PAUSED'}
+                {profile.is_automation_enabled ? 'Active' : 'Paused'}
               </span>
               <label className="switch-container">
                 <input
@@ -332,8 +334,8 @@ export default function DashboardPage() {
                 <span className="switch-slider" style={{
                   position: 'relative',
                   display: 'block',
-                  width: '50px',
-                  height: '26px',
+                  width: '46px',
+                  height: '24px',
                   background: '#cbd5e1',
                   borderRadius: '999px',
                   cursor: 'pointer'
@@ -349,72 +351,122 @@ export default function DashboardPage() {
             gap: '2.25rem'
           }}>
             
-            {/* 2. Corporate Credentials Card */}
+            {/* 2. Portal Credentials Card */}
             <div className="ui-card" style={{ maxWidth: '100%', padding: '2.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
-                <Settings style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>
-                  Corporate Credentials
-                </h3>
+              <div 
+                onClick={() => hasPasswordStored && setIsLocked(!isLocked)}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  borderBottom: '1px solid #e2e8f0', 
+                  paddingBottom: '0.75rem',
+                  cursor: hasPasswordStored ? 'pointer' : 'default',
+                  userSelect: 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Settings style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>
+                    Portal Credentials
+                  </h3>
+                </div>
+                {hasPasswordStored && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsLocked(!isLocked);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent-blue)',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    {isLocked ? 'Edit' : 'Lock'}
+                  </button>
+                )}
               </div>
 
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
                 Credentials entered here are encrypted and safe.
               </p>
 
-              {/* Employee ID rounded */}
+              {/* Employee ID */}
               <div>
                 <label className="glass-label" htmlFor="employee-id-input">Employee ID</label>
-                <div className="ui-input-wrapper" style={{ marginBottom: 0 }}>
+                <div className="ui-input-wrapper" style={{ 
+                  marginBottom: 0,
+                  marginTop: '0.5rem',
+                  opacity: isLocked ? 0.75 : 1,
+                  backgroundColor: isLocked ? '#f8fafc' : 'transparent'
+                }}>
                   <User className="ui-input-icon" />
                   <input
                     id="employee-id-input"
                     type="text"
+                    autoComplete="off"
                     placeholder="200002000"
                     value={profile.employee_id}
                     onChange={(e) => setProfile({ ...profile, employee_id: e.target.value })}
                     className="ui-input"
+                    readOnly={isLocked}
                     required
+                    style={{
+                      cursor: isLocked ? 'not-allowed' : 'text'
+                    }}
                   />
                 </div>
               </div>
 
-              {/* Password rounded */}
+              {/* Password */}
               <div>
                 <label className="glass-label" htmlFor="company-password-input">Password</label>
-                <div className="ui-input-wrapper" style={{ marginBottom: 0 }}>
+                <div className="ui-input-wrapper" style={{ 
+                  marginBottom: 0,
+                  marginTop: '0.5rem',
+                  opacity: isLocked ? 0.75 : 1,
+                  backgroundColor: isLocked ? '#f8fafc' : 'transparent'
+                }}>
                   <Lock className="ui-input-icon" />
                   <input
                     id="company-password-input"
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword && !isLocked ? 'text' : 'password'}
+                    autoComplete="new-password"
                     placeholder={hasPasswordStored ? '••••••••' : 'Enter your password'}
                     value={profile.company_password === '__PRESERVED_PASSWORD__' ? '' : profile.company_password}
                     onChange={(e) => setProfile({ ...profile, company_password: e.target.value || '__PRESERVED_PASSWORD__' })}
                     className="ui-input"
-                    style={{ paddingRight: '2.5rem' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer'
+                    readOnly={isLocked}
+                    style={{ 
+                      paddingRight: '2.5rem',
+                      cursor: isLocked ? 'not-allowed' : 'text'
                     }}
-                  >
-                    {showPassword ? <EyeOff style={{ width: '16px', height: '16px' }} /> : <Eye style={{ width: '16px', height: '16px' }} />}
-                  </button>
+                  />
+                  {!isLocked && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {showPassword ? <EyeOff style={{ width: '16px', height: '16px' }} /> : <Eye style={{ width: '16px', height: '16px' }} />}
+                    </button>
+                  )}
                 </div>
-                {hasPasswordStored && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--accent-blue)', marginTop: '0.5rem', display: 'block', fontWeight: 500 }}>
-                    ✓ Encrypted password saved. Type to replace it.
-                  </span>
-                )}
               </div>
             </div>
 
@@ -426,8 +478,6 @@ export default function DashboardPage() {
                   Work From Home Schedule
                 </h3>
               </div>
-
-
 
               {/* Day selection pill badges */}
               <div>
@@ -463,11 +513,29 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* Reason input rounded */}
+              <div>
+                <label className="glass-label" htmlFor="wfh-reason-input">Reason</label>
+                <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.5rem' }}>
+                  <input
+                    id="wfh-reason-input"
+                    type="text"
+                    autoComplete="off"
+                    placeholder="Work from home"
+                    value={profile.wfh_reason}
+                    onChange={(e) => setProfile({ ...profile, wfh_reason: e.target.value })}
+                    className="ui-input"
+                    style={{ paddingLeft: '1.25rem' }}
+                    required
+                  />
+                </div>
+              </div>
+
               {/* Time inputs rounded */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <label className="glass-label" htmlFor="login-time-input">Log In Time</label>
-                  <div className="ui-input-wrapper" style={{ marginBottom: 0 }}>
+                  <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.5rem' }}>
                     <Clock className="ui-input-icon" />
                     <input
                       id="login-time-input"
@@ -482,7 +550,7 @@ export default function DashboardPage() {
 
                 <div>
                   <label className="glass-label" htmlFor="logout-time-input">Log Out Time</label>
-                  <div className="ui-input-wrapper" style={{ marginBottom: 0 }}>
+                  <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.5rem' }}>
                     <Clock className="ui-input-icon" />
                     <input
                       id="logout-time-input"
@@ -516,14 +584,14 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Save Button */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          {/* Save Button Centered */}
+          <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginTop: '1rem' }}>
             <button 
               id="save-settings-btn" 
               type="submit" 
               className="btn-ui-primary" 
               disabled={saving}
-              style={{ width: 'auto', minWidth: '220px' }}
+              style={{ width: '100%', maxWidth: '320px' }}
             >
               {saving ? (
                 <>
@@ -682,8 +750,8 @@ export default function DashboardPage() {
           position: absolute;
           left: 2px;
           top: 2px;
-          width: 22px;
-          height: 22px;
+          width: 20px;
+          height: 20px;
           background: #ffffff;
           border-radius: 50%;
           transition: transform 0.2s ease-in-out;
@@ -694,7 +762,7 @@ export default function DashboardPage() {
           box-shadow: 0 4px 12px rgba(17, 51, 85, 0.2);
         }
         .switch-input:checked + .switch-slider::before {
-          transform: translateX(24px);
+          transform: translateX(22px);
         }
         @keyframes spin {
           to { transform: rotate(360deg); }
