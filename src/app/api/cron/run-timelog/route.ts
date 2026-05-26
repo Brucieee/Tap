@@ -284,17 +284,17 @@ export async function GET(request: NextRequest) {
           // 1. Login Page Execution
           const loginUrl = process.env.COMPANY_PORTAL_LOGIN_URL || 'https://timelog.cocogen.com.ph/Login';
           console.log(`Navigating to login portal: ${loginUrl}`);
-          await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 30000 });
+          await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 15000 });
 
           // Fill out credentials
-          await page.fill('input[name="ctl00$ContentPlaceHolder1$Login1$UserName"], #ctl00_ContentPlaceHolder1_Login1_UserName', decryptedEmployeeId);
-          await page.fill('input[name="ctl00$ContentPlaceHolder1$Login1$Password"], #ctl00_ContentPlaceHolder1_Login1_Password', decryptedPassword);
+          await page.fill('input[name="ctl00$ContentPlaceHolder1$Login1$UserName"], #ctl00_ContentPlaceHolder1_Login1_UserName', decryptedEmployeeId, { timeout: 10000 });
+          await page.fill('input[name="ctl00$ContentPlaceHolder1$Login1$Password"], #ctl00_ContentPlaceHolder1_Login1_Password', decryptedPassword, { timeout: 10000 });
           
           // Submit Login Form
           console.log('Submitting credentials form...');
           await Promise.all([
-            page.click('input[name="ctl00$ContentPlaceHolder1$Login1$LoginButton"], #ctl00_ContentPlaceHolder1_Login1_LoginButton'),
-            page.waitForNavigation({ waitUntil: 'networkidle', timeout: 20000 }).catch(() => {
+            page.click('input[name="ctl00$ContentPlaceHolder1$Login1$LoginButton"], #ctl00_ContentPlaceHolder1_Login1_LoginButton', { timeout: 10000 }),
+            page.waitForNavigation({ waitUntil: 'networkidle', timeout: 15000 }).catch(() => {
               console.log('Navigation wait timed out or bypassed, continuing flow...');
             })
           ]);
@@ -304,13 +304,18 @@ export async function GET(request: NextRequest) {
           // 2. Click "Add New" button to open/render the timelog submission form
           const addNewBtn = 'input[name="ctl00$ContentPlaceHolder1$Button1"][value="Add New"], #ctl00_ContentPlaceHolder1_Button1';
           console.log('Locating and clicking "Add New" timelog form button...');
-          await page.waitForSelector(addNewBtn, { timeout: 15000 });
-          await page.click(addNewBtn);
+          await page.waitForSelector(addNewBtn, { timeout: 10000 });
+          await page.click(addNewBtn, { timeout: 10000 });
+
+          // Wait for ASP.NET Postback to finish rendering the form
+          console.log('Waiting for form postback to render...');
+          await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+          await page.waitForTimeout(1000); // Small buffer for DOM to become editable
 
           // 3. Inject Form Fields
           // Wait for the update panel/form fields to load
           const typeSelect = 'select[name="ctl00$ContentPlaceHolder1$drp_type"], #ctl00_ContentPlaceHolder1_drp_type';
-          await page.waitForSelector(typeSelect, { timeout: 15000 });
+          await page.waitForSelector(typeSelect, { timeout: 10000 });
 
           // Format Date: Convert YYYY-MM-DD to MM/DD/YYYY
           const [year, month, day] = currentDate.split('-');
@@ -318,33 +323,33 @@ export async function GET(request: NextRequest) {
           console.log(`Injecting form variables: Date=${formattedDate}, Time=${timeToInject}, Mode=${modeText}`);
 
           // Type: "Correction"
-          await page.selectOption(typeSelect, { value: 'C' }); // 'C' represents "Correction"
+          await page.selectOption(typeSelect, { value: 'C' }, { timeout: 5000 }); // 'C' represents "Correction"
 
           // Date 1 (Main date field)
           const dateInput1 = 'input[name="ctl00$ContentPlaceHolder1$txt_date1"], #ctl00_ContentPlaceHolder1_txt_date1';
-          await page.fill(dateInput1, formattedDate);
+          await page.fill(dateInput1, formattedDate, { timeout: 5000 });
 
           // Date 2 (Timelog date field)
           const dateInput2 = 'input[name="ctl00$ContentPlaceHolder1$txt_date2"], #ctl00_ContentPlaceHolder1_txt_date2';
-          await page.fill(dateInput2, formattedDate);
+          await page.fill(dateInput2, formattedDate, { timeout: 5000 });
 
           // Time Input
           const timeInput = 'input[name="ctl00$ContentPlaceHolder1$txtTime"], #ctl00_ContentPlaceHolder1_txtTime';
           const formattedTime = timeToInject.substring(0, 5); // 'hh:mm'
-          await page.fill(timeInput, formattedTime);
+          await page.fill(timeInput, formattedTime, { timeout: 5000 });
 
           // Mode: 'I' for Log In, 'O' for Log Out
           const modeSelect = 'select[name="ctl00$ContentPlaceHolder1$drp_mode"], #ctl00_ContentPlaceHolder1_drp_mode';
           const modeValue = modeParam === 'login' ? 'I' : 'O';
-          await page.selectOption(modeSelect, { value: modeValue });
+          await page.selectOption(modeSelect, { value: modeValue }, { timeout: 5000 });
 
           // Reason: Dynamic WFH Reason from profile settings
           const reasonTextarea = 'textarea[name="ctl00$ContentPlaceHolder1$txt_reason"], #ctl00_ContentPlaceHolder1_txt_reason';
-          await page.fill(reasonTextarea, profile.wfh_reason || 'Work from home');
+          await page.fill(reasonTextarea, profile.wfh_reason || 'Work from home', { timeout: 5000 });
 
           // Approver: "SALVADOR, JOEL PAOLO C."
           const approverSelect = 'select[name="ctl00$ContentPlaceHolder1$drp_approver"], #ctl00_ContentPlaceHolder1_drp_approver';
-          await page.selectOption(approverSelect, { value: '200001808' });
+          await page.selectOption(approverSelect, { value: '200001808' }, { timeout: 5000 });
 
           // 4. Click Submit Button
           console.log('Submitting the timelog form...');
