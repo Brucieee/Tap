@@ -243,11 +243,13 @@ export async function GET(request: NextRequest) {
       const configuredHour = parseInt(timeToInject.split(':')[0], 10);
       
       if (isHourlySchedule && !isManualTest && configuredHour !== currentPhtHour) {
+        const msg = `Skipped: User's configured ${modeText} hour (${configuredHour}) does not match current PHT hour (${currentPhtHour}).`;
+        console.log(`[Profile Evaluation] User ${userId}: ${msg}`);
         results.push({
           userId,
           employeeId: decryptedEmployeeId,
           status: 'skipped',
-          message: `Skipped: User's configured ${modeText} hour (${configuredHour}) does not match current PHT hour (${currentPhtHour}).`
+          message: msg
         });
         continue;
       }
@@ -386,6 +388,8 @@ export async function GET(request: NextRequest) {
     const successCount = results.filter(r => r.status === 'success').length;
     const failedCount = results.filter(r => r.status === 'failed').length;
     const skippedCount = results.filter(r => r.status === 'skipped').length;
+
+    console.log(`[Cron Job Finished] Total Profiles: ${results.length} | Success: ${successCount} | Failed: ${failedCount} | Skipped: ${skippedCount}`);
 
     return NextResponse.json({
       message: `Completed automated timelog run.`,
