@@ -347,9 +347,11 @@ export async function GET(request: NextRequest) {
           const reasonTextarea = 'textarea[name="ctl00$ContentPlaceHolder1$txt_reason"], #ctl00_ContentPlaceHolder1_txt_reason';
           await page.fill(reasonTextarea, profile.wfh_reason || 'Work from home', { timeout: 5000 });
 
-          // Approver: "SALVADOR, JOEL PAOLO C."
+          // Approver: Attempt to select "SALVADOR, JOEL PAOLO C." if available, otherwise gracefully accept portal default
           const approverSelect = 'select[name="ctl00$ContentPlaceHolder1$drp_approver"], #ctl00_ContentPlaceHolder1_drp_approver';
-          await page.selectOption(approverSelect, { value: '200001808' }, { timeout: 5000 });
+          await page.selectOption(approverSelect, { value: '200001808' }, { timeout: 5000 }).catch(() => {
+            console.log('Approver dropdown is read-only or option missing. Accepting portal default manager.');
+          });
 
           // 4. Click Submit Button
           console.log('Submitting the timelog form...');
