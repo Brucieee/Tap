@@ -223,6 +223,55 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
     }
   };
 
+  const triggerBats = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const batCount = 35;
+    const container = document.body;
+
+    for (let i = 0; i < batCount; i++) {
+      const bat = document.createElement('div');
+      bat.className = 'halloween-bat';
+
+      // Spawn near the cursor click coordinate
+      const x = e.clientX || window.innerWidth / 2;
+      const y = e.clientY || window.innerHeight - 50;
+
+      bat.style.left = `${x}px`;
+      bat.style.top = `${y}px`;
+
+      // Random parameters
+      const size = Math.random() * 20 + 15;
+      const scale = Math.random() * 0.8 + 0.4;
+      const duration = Math.random() * 1.5 + 1.2;
+      const delay = Math.random() * 0.3;
+      const angle = (Math.random() - 0.5) * 80;
+
+      bat.style.width = `${size}px`;
+      bat.style.height = `${size}px`;
+      bat.style.setProperty('--scale', `${scale}`);
+      bat.style.setProperty('--fly-x', `${(Math.random() - 0.5) * 600}px`);
+      bat.style.setProperty('--fly-y', `-${window.innerHeight + 100}px`);
+      bat.style.setProperty('--rotate', `${angle}deg`);
+      
+      bat.style.animation = `flyUp ${duration}s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${delay}s both, flap 0.15s infinite alternate ease-in-out`;
+
+      // Batman Silhouette SVG
+      bat.innerHTML = `
+        <svg viewBox="0 0 24 24" width="100%" height="100%" fill="rgba(17, 24, 39, 0.95)">
+          <path d="M12 2c-.5.8-1.5 1.5-2.5 1.5-1 0-2-.7-2.5-1.5-.2.8-.7 1.2-1.2 1.5C5 3.8 4 3.5 3.5 3c-.2.8-.8 1.2-1.5 1.5C1.2 4.7.5 4.5 0 4c.2.8.2 1.8.5 2.5.5 1.2 1.5 2 2.5 2.5 1.5.8 3 .8 4.5.5.5-.2.8-.5 1-.8.2.3.5.6 1 .8 1.5.3 3 .3 4.5-.5 1-.5 2-1.3 2.5-2.5.3-.7.3-1.7.5-2.5-.5.5-1.2.7-2 1-.7-.3-1.3-.7-1.5-1.5-.5.5-1.5.8-2.5.8s-2-.7-2.5-1.5z" />
+        </svg>
+      `;
+
+      container.appendChild(bat);
+
+      // Clean up DOM after transition
+      const totalTimeout = (duration + delay) * 1000;
+      setTimeout(() => {
+        bat.remove();
+      }, totalTimeout);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{
@@ -743,11 +792,46 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
         marginTop: 'auto',
         backgroundColor: '#ffffff'
       }}>
-        © 2026 Tap. Created by Bruce Wayne.
+        © 2026 Tap. Created by <span onClick={triggerBats} className="bruce-wayne-easter" style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--brand-navy)', textDecoration: 'none', transition: 'color 0.2s ease-in-out' }}>Bruce Wayne</span>.
       </footer>
       
-      {/* Dynamic inline styles for switch component toggles */}
+      {/* Dynamic inline styles for switch component toggles and custom animations */}
       <style jsx global>{`
+        .bruce-wayne-easter:hover {
+          color: var(--accent-blue) !important;
+          text-shadow: 0 0 8px rgba(41, 116, 166, 0.25);
+        }
+        .halloween-bat {
+          position: fixed;
+          z-index: 9999;
+          pointer-events: none;
+          will-change: transform, opacity;
+        }
+        @keyframes flyUp {
+          0% {
+            opacity: 0;
+            transform: translate(0, 0) scale(0.2) rotate(0deg);
+          }
+          15% {
+            opacity: 1;
+            transform: translate(calc(var(--fly-x) * 0.15), calc(var(--fly-y) * 0.15)) scale(var(--scale)) rotate(var(--rotate));
+          }
+          85% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            transform: translate(var(--fly-x), var(--fly-y)) scale(0.1) rotate(calc(var(--rotate) * 1.6));
+          }
+        }
+        @keyframes flap {
+          0% {
+            transform: scaleY(1);
+          }
+          100% {
+            transform: scaleY(0.22);
+          }
+        }
         .switch-container {
           display: inline-flex;
           align-items: center;
