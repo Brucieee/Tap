@@ -121,8 +121,30 @@ export async function GET(request: NextRequest) {
     const { chromium } = playwright;
     let browser;
     if (remoteUrl) {
-      console.log(`Connecting to remote Playwright browser service at: ${remoteUrl}`);
-      browser = await chromium.connectOverCDP(remoteUrl);
+      let formattedUrl = remoteUrl;
+      // Auto-format Browserless.io URL if user provided root path
+      if (remoteUrl.includes('browserless.io') && !remoteUrl.includes('/playwright') && !remoteUrl.includes('/chromium')) {
+        try {
+          const urlObj = new URL(remoteUrl);
+          urlObj.pathname = '/playwright';
+          formattedUrl = urlObj.toString();
+          console.log(`Auto-formatted Browserless.io URL to: ${formattedUrl}`);
+        } catch (urlErr) {
+          console.error('Failed to parse remoteUrl, keeping raw:', remoteUrl, urlErr);
+        }
+      }
+
+      console.log(`Connecting to remote Playwright browser service...`);
+      try {
+        if (formattedUrl.includes('/playwright')) {
+          browser = await chromium.connect({ wsEndpoint: formattedUrl });
+        } else {
+          browser = await chromium.connectOverCDP(formattedUrl);
+        }
+      } catch (connErr: any) {
+        console.error(`Browser connection failed:`, connErr);
+        throw new Error(`Failed to connect to remote Playwright service: ${connErr.message}`);
+      }
     } else {
       console.log('Launching local Chromium browser...');
       browser = await chromium.launch({
