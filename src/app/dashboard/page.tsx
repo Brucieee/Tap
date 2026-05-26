@@ -181,7 +181,18 @@ export default function DashboardPage() {
       setTestLogs(prev => [...prev, `[System] Querying local Playwright route at: /api/cron/run-timelog`]);
 
       const response = await fetch(`/api/cron/run-timelog?mode=${testMode}&day=${currentDay}&date=${currentFormattedDate}&test=true`);
-      const data = await response.json();
+      
+      let data: any = {};
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        throw new Error(`Server returned HTML error (Status ${response.status}). This means Vercel's serverless function crashed or timed out before it could respond. 
+
+This happens because PLAYWRIGHT_SERVICE_URL is not configured in your Vercel Environment Variables. 
+
+Since Vercel Serverless is size-restricted, running browser automation locally (chromium.launch()) crashes. You must add the free PLAYWRIGHT_SERVICE_URL env to your Vercel project settings to delegate the headless browser run!`);
+      }
 
       if (response.ok) {
         setTestLogs(prev => [
