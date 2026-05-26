@@ -94,26 +94,21 @@ export default function LoginPage() {
     }}>
       <div className="ui-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
         
-        {/* Colorful Wave ribbon Logo */}
-        <Logo showText={false} width={90} height={40} />
+        {/* Segmented Clock Logo (Increased Size) */}
+        <Logo showText={true} width={100} height={100} textColor="var(--brand-navy)" />
 
-        {/* Heading inspired exactly by the mockup */}
-        <div style={{ textAlign: 'center' }}>
+        {/* Softer, differentiated subtitle to establish clear brand identity */}
+        <div style={{ textAlign: 'center', marginTop: '-0.5rem' }}>
           <h1 style={{ 
-            fontSize: '1.65rem', 
-            fontWeight: 700, 
-            color: 'var(--brand-navy)',
-            fontFamily: 'var(--font-title)',
-            lineHeight: 1.3
+            fontSize: '1.1rem', 
+            fontWeight: 500, 
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-body)',
+            letterSpacing: '0.01em',
+            lineHeight: 1.4
           }}>
-            Welcome Back, <span style={{ textDecoration: 'underline', textUnderlineOffset: '6px' }}>Log In</span> <br />
-            to Continue!
+            {isSignUp ? 'Register to Continue' : 'Log In to Continue'}
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
-            {isSignUp 
-              ? 'Complete the form below to register your profile' 
-              : 'Enter your credentials to manage your automated logs'}
-          </p>
         </div>
 
         {/* Action Form */}

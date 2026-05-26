@@ -4,44 +4,113 @@ interface LogoProps {
   width?: number;
   height?: number;
   showText?: boolean;
+  textColor?: string;
+  brandColor?: string;
+  dialColor?: string;
+  showClock?: boolean;
 }
 
-export default function Logo({ width = 110, height = 48, showText = true }: LogoProps) {
+export default function Logo({ 
+  width = 100, 
+  height = 100, 
+  showText = true,
+  textColor = '#e0f8f5',
+  brandColor = '#e0f8f5',
+  dialColor = '#134440',
+  showClock = true
+}: LogoProps) {
   return (
-    <div className="logo-container">
-      <svg 
-        width={width} 
-        height={height} 
-        viewBox="0 0 120 54" 
-        fill="none" 
-        xmlns="http://www.w3.org/2000/svg"
-        style={{ filter: 'drop-shadow(0 4px 8px rgba(17, 51, 85, 0.06))' }}
-      >
-        {/* Blue Ribbon Segment (Right hand wave loop) */}
-        <path 
-          d="M60 27C72 15 84 8 98 8C110 8 116 16 116 27C116 38 110 46 98 46C82 46 70 35 60 27Z" 
-          fill="#2974a6" 
-        />
-        
-        {/* Orange Ribbon Segment (Left hand wave loop) */}
-        <path 
-          d="M60 27C48 39 36 46 22 46C10 46 4 38 4 27C4 16 10 8 22 8C38 8 50 19 60 27Z" 
-          fill="#f08c64" 
-        />
-        
-        {/* Overlapping core accent to create the beautiful woven ribbon effect */}
-        <path 
-          d="M52 20.6C55.2 23.2 58.4 25.8 61.6 28.4C65.5 25.3 69.4 22.2 73 19C69 13.5 61.5 8 54 8C48 8 43 11 39 15C43.5 16.5 48 18.5 52 20.6Z" 
-          fill="#f08c64" 
-          opacity="0.95"
-        />
-        <path 
-          d="M68 33.4C64.8 30.8 61.6 28.2 58.4 25.6C54.5 28.7 50.6 31.8 47 35C51 40.5 58.5 46 66 46C72 46 77 43 81 39C76.5 37.5 72 35.5 68 33.4Z" 
-          fill="#2974a6" 
-          opacity="0.95"
-        />
-      </svg>
-      {showText && <span className="logo-text">TAP</span>}
+    <div className="flex flex-col items-center justify-center select-none" style={{ textAlign: 'center' }}>
+      {showClock && (
+        <svg 
+          width={width} 
+          height={height} 
+          viewBox="0 0 120 110" 
+          fill="none" 
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          {/* Deep Teal Background Face Dial */}
+          <circle cx="60" cy="55" r="30" fill={dialColor} />
+
+          {/* Hour Indicator Dots (12, 3, 6, 9 o'clock) */}
+          <circle cx="60" cy="35" r="2" fill={brandColor} opacity="0.9" />
+          <circle cx="60" cy="75" r="2" fill={brandColor} opacity="0.9" />
+          <circle cx="40" cy="55" r="2" fill={brandColor} opacity="0.9" />
+          <circle cx="80" cy="55" r="2" fill={brandColor} opacity="0.9" />
+
+          {/* 3 Outer Arc segments (Radius 38) */}
+          {/* Top Arc (spans 240° to 300°) */}
+          <path 
+            d="M 41 22.1 A 38 38 0 0 1 79 22.1" 
+            stroke={brandColor} 
+            strokeWidth="3.5" 
+            strokeLinecap="round" 
+            fill="none" 
+          />
+          
+          {/* Right Arc (spans 320° to 80°) */}
+          <path 
+            d="M 89.1 30.6 A 38 38 0 0 1 66.6 92.4" 
+            stroke={brandColor} 
+            strokeWidth="3.5" 
+            strokeLinecap="round" 
+            fill="none" 
+          />
+          
+          {/* Left Arc (spans 100° to 220°) */}
+          <path 
+            d="M 53.4 92.4 A 38 38 0 0 1 30.9 30.6" 
+            stroke={brandColor} 
+            strokeWidth="3.5" 
+            strokeLinecap="round" 
+            fill="none" 
+          />
+
+          {/* Clock Hands */}
+          {/* Minute Hand (pointing to ~10:30 / 225 degrees) */}
+          <line 
+            x1="60" 
+            y1="55" 
+            x2="43.7" 
+            y2="38.7" 
+            stroke={brandColor} 
+            strokeWidth="4" 
+            strokeLinecap="round" 
+          />
+          
+          {/* Hour Hand (pointing to ~1:30 / 315 degrees) */}
+          <line 
+            x1="60" 
+            y1="55" 
+            x2="69.9" 
+            y2="45.1" 
+            stroke={brandColor} 
+            strokeWidth="4" 
+            strokeLinecap="round" 
+          />
+
+          {/* Central Pin/Hub */}
+          <circle cx="60" cy="55" r="4.5" fill={brandColor} />
+          <circle cx="60" cy="55" r="1.5" fill={dialColor} />
+        </svg>
+      )}
+      
+      {showText && (
+        <div 
+          style={{ 
+            marginTop: showClock ? '0.75rem' : '0px',
+            fontSize: '1.8rem',
+            fontWeight: 800,
+            letterSpacing: '0.3em',
+            textIndent: '0.3em', // Center-align letter-spacing correctly
+            color: textColor,
+            fontFamily: 'Outfit, Inter, sans-serif',
+            textTransform: 'uppercase'
+          }}
+        >
+          TAP
+        </div>
+      )}
     </div>
   );
 }

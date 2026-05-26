@@ -358,5 +358,56 @@ body {
   background-color: rgba(239, 68, 68, 0.05) !important;
 }
 
+/* TAP Landing Page Animation Styles */
+@keyframes float {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(1deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+@keyframes drift {
+  0% { transform: translate(0px, 0px); }
+  50% { transform: translate(15px, -15px); }
+  100% { transform: translate(0px, 0px); }
+}
+
+.hero-clock-container {
+  animation: float 6s ease-in-out infinite;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hero-clock-container:hover {
+  transform: scale(1.04) rotate(3deg);
+  filter: drop-shadow(0 20px 40px rgba(17, 51, 85, 0.12));
+}
+
+.floating-disk-1 {
+  animation: drift 12s ease-in-out infinite;
+}
+
+.floating-disk-2 {
+  animation: drift 16s ease-in-out infinite alternate;
+}
+
+.hero-cta-btn {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hero-cta-btn:hover {
+  transform: translateY(-2px);
+  background-color: var(--brand-navy-hover) !important;
+  box-shadow: 0 12px 24px rgba(17, 51, 85, 0.3) !important;
+}
+
+.hero-cta-btn:hover .cta-arrow {
+  transform: translateX(3px);
+}
+
+.cta-arrow {
+  display: inline-flex;
+  align-items: center;
+  transition: transform 0.2s ease-in-out;
+}
+
 
 
