@@ -195,6 +195,7 @@ export async function GET(request: NextRequest) {
       const encryptedPassword = profile.company_password;
 
       if (!encryptedEmployeeId || !encryptedPassword) {
+        console.log(`[Profile Evaluation] User ${userId}: Skipped - Corporate credentials missing.`);
         results.push({
           userId,
           employeeId: 'N/A',
@@ -211,6 +212,7 @@ export async function GET(request: NextRequest) {
       const isWfhDay = wfhDays.some((day: string) => day.toLowerCase() === currentDay.toLowerCase());
 
       if (!isWfhDay && !isManualTest) {
+        console.log(`[Profile Evaluation] User ${userId}: Skipped - Today (${currentDay}) is not in WFH schedule.`);
         results.push({
           userId,
           employeeId: 'Configured',
@@ -224,6 +226,7 @@ export async function GET(request: NextRequest) {
       const decryptedPassword = decrypt(encryptedPassword);
 
       if (!decryptedEmployeeId || !decryptedPassword) {
+        console.log(`[Profile Evaluation] User ${userId}: Failed - Decryption error.`);
         results.push({
           userId,
           employeeId: 'Failed Decryption',
@@ -390,6 +393,7 @@ export async function GET(request: NextRequest) {
     const skippedCount = results.filter(r => r.status === 'skipped').length;
 
     console.log(`[Cron Job Finished] Total Profiles: ${results.length} | Success: ${successCount} | Failed: ${failedCount} | Skipped: ${skippedCount}`);
+    console.log('Final Results Details:', JSON.stringify(results, null, 2));
 
     return NextResponse.json({
       message: `Completed automated timelog run.`,
