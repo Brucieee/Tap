@@ -210,7 +210,7 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
           `[Execution Summary] Success: ${data.summary.success} | Failed: ${data.summary.failed} | Skipped: ${data.summary.skipped}`
         ]);
       } else {
-        throw new Error(data.error || 'Server cron failed.');
+        throw new Error((data.error || 'Server cron failed.') + (data.details ? ' | Details: ' + data.details : ''));
       }
     } catch (err: any) {
       setTestLogs(prev => [
