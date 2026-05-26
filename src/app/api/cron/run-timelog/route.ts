@@ -21,13 +21,22 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Get current hour in Philippine Time (PHT, Asia/Manila, GMT+8)
+  const currentPhtHour = parseInt(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila',
+      hour: 'numeric',
+      hour12: false
+    }).format(new Date()),
+    10
+  );
+
   // Determine Mode: 'login' or 'logout'
   // Custom query param ?mode=login or ?mode=logout, otherwise auto-detect by time of day (AM = login, PM = logout)
   let modeParam = searchParams.get('mode')?.toLowerCase();
   if (modeParam !== 'login' && modeParam !== 'logout') {
-    const currentHour = new Date().getHours();
-    // Default: Log in if triggered before 12:00 PM, otherwise Log out
-    modeParam = currentHour < 12 ? 'login' : 'logout';
+    // Default: Log in if triggered before 12:00 PM PHT, otherwise Log out
+    modeParam = currentPhtHour < 12 ? 'login' : 'logout';
   }
   const modeText = modeParam === 'login' ? 'Log In' : 'Log Out';
 
@@ -204,6 +213,20 @@ export async function GET(request: NextRequest) {
       const timeToInject = modeParam === 'login' 
         ? (profile.login_time || '08:00:00') 
         : (profile.logout_time || '17:00:00');
+
+      // In dynamic hourly scheduling mode (?schedule=hourly), check if the user's configured hour matches the current PHT hour
+      const isHourlySchedule = searchParams.get('schedule') === 'hourly';
+      const configuredHour = parseInt(timeToInject.split(':')[0], 10);
+      
+      if (isHourlySchedule && !isManualTest && configuredHour !== currentPhtHour) {
+        results.push({
+          userId,
+          employeeId: decryptedEmployeeId,
+          status: 'skipped',
+          message: `Skipped: User's configured ${modeText} hour (${configuredHour}) does not match current PHT hour (${currentPhtHour}).`
+        });
+        continue;
+      }
 
       // Execute Playwright flow in isolation for this user with automatic self-healing retries
       const maxRetries = 3;

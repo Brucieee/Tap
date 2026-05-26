@@ -1,12 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/run-timelog?mode=login",
-      "schedule": "5 0 * * 1-5"
-    },
-    {
-      "path": "/api/cron/run-timelog?mode=logout",
-      "schedule": "5 9 * * 1-5"
+      "path": "/api/cron/run-timelog?schedule=hourly",
+      "schedule": "5 22,23,0,1,2,8,9,10,11,12 * * 1-5"
     }
   ]
 }
