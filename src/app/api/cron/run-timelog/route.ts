@@ -72,6 +72,12 @@ export async function GET(request: NextRequest) {
   }
 
   if (!supabase) {
+    console.log('Initializing Supabase Admin Client. Env validation:', {
+      hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      serviceRoleKeyLength: process.env.SUPABASE_SERVICE_ROLE_KEY?.length || 0,
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL
+    });
     supabase = createAdminClient();
   }
 
