@@ -404,6 +404,201 @@ body {
 }
 
 .cta-arrow {
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-ui-primary:hover {
+  background-color: var(--brand-navy-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 16px 32px rgba(17, 51, 85, 0.32);
+}
+
+.btn-ui-primary:active {
+  transform: translateY(0);
+}
+
+.btn-ui-primary:disabled {
+  background-color: #cbd5e1;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Secondary Outline Button */
+.btn-ui-secondary {
+  width: 100%;
+  padding: 1.05rem 2rem;
+  background-color: transparent;
+  color: var(--brand-navy);
+  border: 1px solid var(--brand-navy);
+  border-radius: 999px;
+  font-family: var(--font-title);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-ui-secondary:hover {
+  background-color: rgba(17, 51, 85, 0.04);
+}
+
+/* Custom UI Checkbox matching left/right screens */
+.ui-checkbox-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.ui-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.ui-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid var(--text-muted);
+  cursor: pointer;
+  accent-color: var(--brand-navy);
+}
+
+/* Header style update for Dashboard */
+.header-ui {
+  background: var(--card-bg);
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+}
+
+.header-email-desktop {
+  display: block;
+}
+
+/* Premium Mobile Responsive overrides */
+@media (max-width: 640px) {
+  body {
+    background-color: #f5f6fa;
+  }
+  
+  .header-email-desktop {
+    display: none !important;
+  }
+  
+  .ui-card {
+    border-radius: 28px !important;
+    padding: 2rem 1.25rem !important;
+    box-shadow: 0 10px 30px rgba(17, 51, 85, 0.04) !important;
+  }
+
+  .ui-checkbox-container {
+    flex-direction: row;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+  }
+  
+  header {
+    padding: 0.75rem 1rem !important;
+  }
+  
+  main {
+    padding: 1.5rem 1rem !important;
+    gap: 1.5rem !important;
+  }
+  
+  .logo-text {
+    font-size: 1.15rem;
+  }
+  
+  h1 {
+    font-size: 1.45rem !important;
+  }
+  
+  h3 {
+    font-size: 1rem !important;
+  }
+
+  .btn-ui-primary, .btn-ui-secondary {
+    padding: 0.9rem 1.5rem !important;
+    font-size: 0.9rem !important;
+  }
+  
+  .switch-container {
+    scale: 0.9;
+  }
+}
+
+.btn-signout {
+  color: var(--text-muted) !important;
+  border: 1px solid var(--input-border) !important;
+  background-color: transparent !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+.btn-signout:hover {
+  color: #ef4444 !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  background-color: rgba(239, 68, 68, 0.05) !important;
+}
+
+/* TAP Landing Page Animation Styles */
+@keyframes float {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(1deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+@keyframes drift {
+  0% { transform: translate(0px, 0px); }
+  50% { transform: translate(15px, -15px); }
+  100% { transform: translate(0px, 0px); }
+}
+
+.hero-clock-container {
+  animation: float 6s ease-in-out infinite;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hero-clock-container:hover {
+  transform: scale(1.04) rotate(3deg);
+  filter: drop-shadow(0 20px 40px rgba(17, 51, 85, 0.12));
+}
+
+.floating-disk-1 {
+  animation: drift 12s ease-in-out infinite;
+}
+
+.floating-disk-2 {
+  animation: drift 16s ease-in-out infinite alternate;
+}
+
+.hero-cta-btn {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hero-cta-btn:hover {
+  transform: translateY(-2px);
+  background-color: var(--brand-navy-hover) !important;
+  box-shadow: 0 12px 24px rgba(17, 51, 85, 0.3) !important;
+}
+
+.hero-cta-btn:hover .cta-arrow {
+  transform: translateX(3px);
+}
+
+.cta-arrow {
   display: inline-flex;
   align-items: center;
   transition: transform 0.2s ease-in-out;
@@ -451,6 +646,15 @@ body {
   letter-spacing: -0.03em;
 }
 
+.hero-subtitle {
+  font-size: 1.15rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 580px;
+  margin: 0;
+  font-family: var(--font-body);
+}
+
 .hero-cta-container {
   display: flex;
   gap: 1rem;
@@ -466,23 +670,37 @@ body {
 /* Mobile Media Queries for Landing Page */
 @media (max-width: 968px) {
   .hero-header {
-    padding: 1.5rem 1.25rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem 1.25rem 0.5rem 1.25rem;
   }
 
   .hero-main {
-    grid-template-columns: 1fr;
-    gap: 3.5rem;
-    padding: 2rem 1.5rem 4rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2.25rem;
+    padding: 1rem 1.5rem 3rem 1.5rem;
     text-align: center;
+    align-items: center;
+    justify-content: center;
   }
 
   .hero-content {
     align-items: center;
-    gap: 1.75rem;
+    gap: 1.5rem;
   }
 
   .hero-title {
-    font-size: 3rem;
+    font-size: 2.75rem;
+    line-height: 1.2;
+  }
+
+  .hero-subtitle {
+    font-size: 1.05rem;
+    max-width: 100%;
+    padding: 0 0.5rem;
+    line-height: 1.5;
   }
 
   .hero-cta-container {
@@ -492,6 +710,8 @@ body {
 
   .hero-clock-wrapper {
     order: -1; /* Place the beautiful logo clock at the top on mobile screens! */
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
   }
 
   .floating-disk-1, .floating-disk-2 {
@@ -503,7 +723,7 @@ body {
 
 @media (max-width: 480px) {
   .hero-title {
-    font-size: 2.35rem;
+    font-size: 2.25rem;
     line-height: 1.25;
   }
 

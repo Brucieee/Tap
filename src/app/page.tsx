@@ -79,6 +79,10 @@ export default async function Home() {
               Be on time.
             </span>
           </h1>
+
+          <p className="hero-subtitle">
+            Say goodbye to manual WFH attendance. Secure, automated timelogs synced with Standly, running seamlessly in the background.
+          </p>
  
           <div className="hero-cta-container">
             <Link 
