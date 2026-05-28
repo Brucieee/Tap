@@ -163,6 +163,21 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Fetch global company events
+    let companyEvents: any[] = [];
+    try {
+      const { data: eventsData, error: eventsError } = await supabase
+        .from('company_events')
+        .select('*');
+      if (eventsError) {
+        console.error('Error fetching company events in scheduler:', eventsError);
+      } else {
+        companyEvents = eventsData || [];
+      }
+    } catch (err) {
+      console.error('Failed to query company events in scheduler:', err);
+    }
+
     // Fetch profiles
     let profiles;
     let dbError;
@@ -381,10 +396,24 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      // Determine time value to inject
-      const timeToInject = modeParam === 'login' 
-        ? (profile.login_time || '08:00:00') 
-        : (profile.logout_time || '17:00:00');
+      // Check for global company event overriding standard hours on this specific date
+      const matchedEvent = companyEvents.find((e: any) => e.date === currentDate);
+      const isExcludedFromEvent = matchedEvent && matchedEvent.excluded_users && matchedEvent.excluded_users.includes(userId);
+      
+      let timeToInject;
+      if (matchedEvent && !isExcludedFromEvent) {
+        timeToInject = modeParam === 'login'
+          ? (matchedEvent.login_time || '08:00:00')
+          : (matchedEvent.logout_time || '12:00:00');
+        console.log(`[Company Event Override] User ${userId}: Found company event "${matchedEvent.title}" for date ${currentDate}. Overriding hours for ${modeText} mode to ${timeToInject}`);
+      } else {
+        if (matchedEvent && isExcludedFromEvent) {
+          console.log(`[Company Event Exclusion] User ${userId}: Excluded from event "${matchedEvent.title}" for date ${currentDate}. Keeping standard hours.`);
+        }
+        timeToInject = modeParam === 'login' 
+          ? (profile.login_time || '08:00:00') 
+          : (profile.logout_time || '17:00:00');
+      }
 
       // In dynamic hourly scheduling mode (?schedule=hourly), check if the user's configured hour matches the current PHT hour
       const isHourlySchedule = searchParams.get('schedule') === 'hourly';
@@ -547,7 +576,9 @@ export async function GET(request: NextRequest) {
             userId,
             employeeId: decryptedEmployeeId,
             status: 'success',
-            message: `Successfully submitted timelog ${modeText} for WFH day (${currentDay}) at ${timeToInject}.`
+            message: (matchedEvent && !isExcludedFromEvent)
+              ? `Successfully submitted timelog ${modeText} for Company Event [${matchedEvent.title}] at ${timeToInject}.`
+              : `Successfully submitted timelog ${modeText} for WFH day (${currentDay}) at ${timeToInject}.`
           });
 
           success = true;

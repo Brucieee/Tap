@@ -19,7 +19,10 @@ import {
   Loader2, 
   AlertCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  Megaphone,
+  Trash2,
+  Plus
 } from 'lucide-react';
 import Logo from '@/components/Logo';
 import BatEffect from '@/components/effects/BatEffect';
@@ -28,14 +31,33 @@ const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
 export default function DashboardPage() {
   const [profile, setProfile] = useState({
+    id: '',
     employee_id: '',
     company_password: '',
     wfh_days: [] as string[],
     login_time: '08:00',
     logout_time: '17:00',
     is_automation_enabled: true,
-    wfh_reason: 'Work from home'
+    wfh_reason: 'Work from home',
+    role: 'user'
   });
+
+  // Company Events State
+  const [companyEvents, setCompanyEvents] = useState<any[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [newEvent, setNewEvent] = useState({
+    title: '',
+    date: '',
+    login_time: '08:00',
+    logout_time: '12:00'
+  });
+  const [isSubmittingEvent, setIsSubmittingEvent] = useState(false);
+  const [eventMessage, setEventMessage] = useState({ text: '', type: '' as 'success' | 'error' | '' });
+  
+  // Exclusions State
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [excludedUsers, setExcludedUsers] = useState<string[]>([]);
   
   const [userEmail, setUserEmail] = useState('');
   const [loading, setLoading] = useState(true);
@@ -67,11 +89,13 @@ export default function DashboardPage() {
       
       setUserEmail(session.user.email || '');
 
+      let isAdminUser = false;
       // Fetch profile settings
       try {
         const response = await fetch('/api/profile');
         if (response.ok) {
           const data = await response.json();
+          isAdminUser = data.role === 'admin';
           
           const cleanLoginTime = data.login_time ? data.login_time.substring(0, 5) : '08:00';
           const cleanLogoutTime = data.logout_time ? data.logout_time.substring(0, 5) : '17:00';
@@ -81,13 +105,15 @@ export default function DashboardPage() {
           setIsLocked(passwordPresent);
 
           setProfile({
+            id: data.id || '',
             employee_id: data.employee_id || '',
             company_password: passwordPresent ? '__PRESERVED_PASSWORD__' : '',
             wfh_days: data.wfh_days || [],
             login_time: cleanLoginTime,
             logout_time: cleanLogoutTime,
             is_automation_enabled: data.is_automation_enabled !== undefined ? data.is_automation_enabled : true,
-            wfh_reason: data.wfh_reason || 'Work from home'
+            wfh_reason: data.wfh_reason || 'Work from home',
+            role: data.role || 'user'
           });
         }
       } catch (error) {
@@ -109,6 +135,35 @@ export default function DashboardPage() {
         console.error('Failed to load Standly data:', error);
       } finally {
         setLoadingStandly(false);
+      }
+
+      // Fetch company events
+      try {
+        const response = await fetch('/api/company-events');
+        if (response.ok) {
+          const data = await response.json();
+          setCompanyEvents(data || []);
+        }
+      } catch (error) {
+        console.error('Failed to load company events:', error);
+      } finally {
+        setLoadingEvents(false);
+      }
+
+      // Fetch registered employee list if the logged in user is an admin
+      if (isAdminUser) {
+        setLoadingEmployees(true);
+        try {
+          const empRes = await fetch('/api/profiles');
+          if (empRes.ok) {
+            const empData = await empRes.json();
+            setAllEmployees(empData || []);
+          }
+        } catch (error) {
+          console.error('Failed to load registered profiles:', error);
+        } finally {
+          setLoadingEmployees(false);
+        }
       }
     };
 
@@ -244,6 +299,81 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
     }
   };
 
+  const handleToggleExcludeUser = (userId: string) => {
+    setExcludedUsers(prev => 
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingEvent(true);
+    setEventMessage({ text: '', type: '' });
+
+    if (!newEvent.title || !newEvent.date) {
+      setEventMessage({ text: 'Title and Date are required.', type: 'error' });
+      setIsSubmittingEvent(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/company-events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...newEvent,
+          excluded_users: excludedUsers
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setEventMessage({ text: 'Company event scheduled successfully!', type: 'success' });
+        setNewEvent({
+          title: '',
+          date: '',
+          login_time: '08:00',
+          logout_time: '12:00'
+        });
+        
+        // Refresh events list
+        const getRes = await fetch('/api/company-events');
+        if (getRes.ok) {
+          const freshEvents = await getRes.json();
+          setCompanyEvents(freshEvents || []);
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create event.');
+      }
+    } catch (err: any) {
+      setEventMessage({ text: err.message || 'Failed to save event.', type: 'error' });
+    } finally {
+      setIsSubmittingEvent(false);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    if (!confirm('Are you sure you want to delete this company event?')) return;
+    
+    try {
+      const response = await fetch(`/api/company-events?id=${eventId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setCompanyEvents(prev => prev.filter(ev => ev.id !== eventId));
+      } else {
+        const errorData = await response.json();
+        alert(errorData.error || 'Failed to delete event.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete event.');
+    }
+  };
+
   const triggerBats = (e: React.MouseEvent) => {
     e.preventDefault();
     setTriggerBatEffect(true);
@@ -293,6 +423,115 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
         flexDirection: 'column',
         gap: '2.25rem'
       }}>
+        
+        {/* Company Events Notifications Banners */}
+        {(() => {
+          // Format date as local date string in YYYY-MM-DD format
+          const now = new Date();
+          const offset = now.getTimezoneOffset();
+          const localToday = new Date(now.getTime() - (offset * 60 * 1000));
+          const todayStr = localToday.toISOString().split('T')[0];
+
+          const tomorrowObj = new Date(now.getTime() + (24 * 60 * 60 * 1000) - (offset * 60 * 1000));
+          const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
+
+          const todayEvent = companyEvents.find(e => e.date === todayStr);
+          const tomorrowEvent = companyEvents.find(e => e.date === tomorrowStr);
+
+          const isCurrentUserExcluded = todayEvent && todayEvent.excluded_users && todayEvent.excluded_users.includes(profile.id);
+          const isCurrentUserExcludedTomorrow = tomorrowEvent && tomorrowEvent.excluded_users && tomorrowEvent.excluded_users.includes(profile.id);
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {todayEvent && (
+                <div style={{
+                  padding: '1.25rem 1.5rem',
+                  borderRadius: '20px',
+                  background: isCurrentUserExcluded 
+                    ? 'linear-gradient(135deg, rgba(71, 85, 105, 0.08) 0%, rgba(71, 85, 105, 0.04) 100%)' 
+                    : 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(220, 38, 38, 0.04) 100%)',
+                  border: isCurrentUserExcluded 
+                    ? '1px solid rgba(71, 85, 105, 0.25)' 
+                    : '1px solid rgba(239, 68, 68, 0.25)',
+                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.02)',
+                  backdropFilter: 'blur(10px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem'
+                }}>
+                  <div style={{
+                    backgroundColor: isCurrentUserExcluded ? 'rgba(71, 85, 105, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    borderRadius: '12px',
+                    padding: '0.6rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isCurrentUserExcluded ? '#475569' : '#dc2626'
+                  }}>
+                    <Megaphone style={{ width: '20px', height: '20px' }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ fontSize: '0.9rem', fontWeight: 750, color: isCurrentUserExcluded ? '#334155' : '#b91c1c', margin: '0 0 2px 0', fontFamily: 'var(--font-title)' }}>
+                      Global Company Event Today!
+                    </h4>
+                    {isCurrentUserExcluded ? (
+                      <p style={{ fontSize: '0.8rem', color: '#475569', margin: 0, fontWeight: 550, lineHeight: '1.4' }}>
+                        Today is <strong>{todayEvent.title}</strong>. Note: You are <strong>excluded</strong> from this event hours override, so your automated timelog will run using your standard schedule: <strong>{profile.login_time}</strong> to <strong>{profile.logout_time}</strong>.
+                      </p>
+                    ) : (
+                      <p style={{ fontSize: '0.8rem', color: '#7f1d1d', margin: 0, fontWeight: 550, lineHeight: '1.4' }}>
+                        Today is <strong>{todayEvent.title}</strong>. Your automated timelog has been adjusted globally to log in at <strong>{todayEvent.login_time.substring(0, 5)}</strong> and log out at <strong>{todayEvent.logout_time.substring(0, 5)}</strong>.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {tomorrowEvent && !todayEvent && (
+                <div style={{
+                  padding: '1.25rem 1.5rem',
+                  borderRadius: '20px',
+                  background: isCurrentUserExcludedTomorrow
+                    ? 'linear-gradient(135deg, rgba(71, 85, 105, 0.08) 0%, rgba(71, 85, 105, 0.04) 100%)'
+                    : 'linear-gradient(135deg, rgba(41, 116, 166, 0.08) 0%, rgba(30, 80, 115, 0.04) 100%)',
+                  border: isCurrentUserExcludedTomorrow
+                    ? '1px solid rgba(71, 85, 105, 0.25)'
+                    : '1px solid rgba(41, 116, 166, 0.25)',
+                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.02)',
+                  backdropFilter: 'blur(10px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem'
+                }}>
+                  <div style={{
+                    backgroundColor: isCurrentUserExcludedTomorrow ? 'rgba(71, 85, 105, 0.1)' : 'rgba(41, 116, 166, 0.1)',
+                    borderRadius: '12px',
+                    padding: '0.6rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isCurrentUserExcludedTomorrow ? '#475569' : 'var(--accent-blue)'
+                  }}>
+                    <Calendar style={{ width: '20px', height: '20px' }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ fontSize: '0.9rem', fontWeight: 750, color: isCurrentUserExcludedTomorrow ? '#334155' : 'var(--brand-navy)', margin: '0 0 2px 0', fontFamily: 'var(--font-title)' }}>
+                      Upcoming Company Event Tomorrow
+                    </h4>
+                    {isCurrentUserExcludedTomorrow ? (
+                      <p style={{ fontSize: '0.8rem', color: '#475569', margin: 0, fontWeight: 550, lineHeight: '1.4' }}>
+                        Tomorrow is <strong>{tomorrowEvent.title}</strong>. Note: You are <strong>excluded</strong> from this event hours override. Your automated timelog will run using your standard configured hours: <strong>{profile.login_time}</strong> to <strong>{profile.logout_time}</strong>.
+                      </p>
+                    ) : (
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-primary)', margin: 0, fontWeight: 550, lineHeight: '1.4' }}>
+                        Tomorrow is <strong>{tomorrowEvent.title}</strong>. Automated timelog schedules will automatically run using overridden hours: log in at <strong>{tomorrowEvent.login_time.substring(0, 5)}</strong> and log out at <strong>{tomorrowEvent.logout_time.substring(0, 5)}</strong>.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
         
         {/* Seamless Header Row */}
         <div style={{
@@ -349,8 +588,8 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
           </div>
         </div>
         
-        {/* Main Controls Form */}
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '2.25rem' }}>
+        {/* Main Controls Container */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2.25rem' }}>
           
           {/* 1. Header Control Panel Card */}
           <div className="ui-card" style={{
@@ -398,7 +637,286 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
             </div>
           </div>
 
-          {/* Leaves & Holidays Panel (Standly Integration) */}
+          {/* Company Events (Admin-only panel) */}
+          {profile.role === 'admin' && (
+            <div className="ui-card" style={{
+              maxWidth: '100%',
+              padding: '2.25rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1.5rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+                <ShieldCheck style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
+                  Company Events
+                </h3>
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: '2.25rem',
+                marginTop: '0.5rem'
+              }}>
+                {/* Left Column: Form to create event */}
+                <form onSubmit={handleCreateEvent} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--brand-navy)', margin: 0 }}>
+                    Schedule New Event
+                  </h4>
+                  
+                  {/* Event Title */}
+                  <div>
+                    <label className="glass-label" htmlFor="event-title-input">Event Name</label>
+                    <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.4rem' }}>
+                      <input
+                        id="event-title-input"
+                        type="text"
+                        placeholder="e.g. Half-day Company Event"
+                        value={newEvent.title}
+                        onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                        className="ui-input"
+                        style={{ paddingLeft: '1rem' }}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Event Date */}
+                  <div>
+                    <label className="glass-label" htmlFor="event-date-input">Event Date</label>
+                    <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.4rem' }}>
+                      <input
+                        id="event-date-input"
+                        type="date"
+                        value={newEvent.date}
+                        onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })}
+                        className="ui-input"
+                        style={{ paddingLeft: '1rem' }}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Adjusted hours */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label className="glass-label" htmlFor="event-login-input">Event Log In</label>
+                      <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.4rem' }}>
+                        <input
+                          id="event-login-input"
+                          type="time"
+                          value={newEvent.login_time}
+                          onChange={(e) => setNewEvent({ ...newEvent, login_time: e.target.value })}
+                          className="ui-input"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="glass-label" htmlFor="event-logout-input">Event Log Out</label>
+                      <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.4rem' }}>
+                        <input
+                          id="event-logout-input"
+                          type="time"
+                          value={newEvent.logout_time}
+                          onChange={(e) => setNewEvent({ ...newEvent, logout_time: e.target.value })}
+                          className="ui-input"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Excluded Employees Checkbox Selection */}
+                  <div>
+                    <label className="glass-label">Excluded Employees (Attending normal hours)</label>
+                    {loadingEmployees ? (
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>Loading employees...</p>
+                    ) : allEmployees.length === 0 ? (
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>No other employees found.</p>
+                    ) : (
+                      <div style={{
+                        marginTop: '0.5rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.5rem',
+                        maxHeight: '120px',
+                        overflowY: 'auto',
+                        border: '1px solid var(--input-border)',
+                        borderRadius: '12px',
+                        padding: '0.6rem 0.8rem',
+                        background: '#ffffff'
+                      }}>
+                        {allEmployees.map((emp) => {
+                          const isExcluded = excludedUsers.includes(emp.id);
+                          return (
+                            <label
+                              key={emp.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                fontSize: '0.75rem',
+                                color: 'var(--text-primary)',
+                                cursor: 'pointer',
+                                userSelect: 'none',
+                                marginBottom: 0
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isExcluded}
+                                onChange={() => handleToggleExcludeUser(emp.id)}
+                                style={{
+                                  cursor: 'pointer',
+                                  accentColor: 'var(--brand-navy)'
+                                }}
+                              />
+                              <span style={{ textDecoration: isExcluded ? 'line-through' : 'none', color: isExcluded ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                                {emp.email}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {eventMessage.text && (
+                    <div style={{
+                      background: eventMessage.type === 'success' ? '#f0fdf4' : '#fef2f2',
+                      border: `1px solid ${eventMessage.type === 'success' ? '#dcfce7' : '#fee2e2'}`,
+                      color: eventMessage.type === 'success' ? '#166534' : '#991b1b',
+                      padding: '0.65rem 1rem',
+                      borderRadius: '12px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem'
+                    }}>
+                      <span>{eventMessage.type === 'success' ? '✓' : '⚠'}</span>
+                      {eventMessage.text}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingEvent}
+                    className="btn-ui-primary"
+                    style={{
+                      padding: '0.65rem 1.25rem',
+                      fontSize: '0.85rem',
+                      borderRadius: '14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      marginTop: '0.5rem',
+                      width: '100%',
+                      fontWeight: 600
+                    }}
+                  >
+                    {isSubmittingEvent ? (
+                      <>
+                        <Loader2 className="animate-spin" style={{ width: '16px', height: '16px', animation: 'spin 1.5s linear infinite' }} />
+                        Scheduling...
+                      </>
+                    ) : (
+                      <>
+                        <Plus style={{ width: '16px', height: '16px' }} />
+                        Schedule Event
+                      </>
+                    )}
+                  </button>
+                </form>
+
+                {/* Right Column: List of configured events */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--brand-navy)', margin: 0 }}>
+                    Configured Company Events
+                  </h4>
+
+                  {loadingEvents ? (
+                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                      Loading events...
+                    </div>
+                  ) : companyEvents.length === 0 ? (
+                    <div style={{
+                      padding: '2rem 1.5rem',
+                      border: '1px dashed #e2e8f0',
+                      borderRadius: '16px',
+                      textAlign: 'center',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.8rem',
+                      background: '#fafafa',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
+                    }}>
+                      <Calendar style={{ width: '24px', height: '24px', color: 'var(--text-muted)' }} />
+                      <span>No company events are scheduled.</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
+                      {companyEvents.map((event) => {
+                        const evDate = new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', weekday: 'short' });
+                        return (
+                          <div key={event.id} style={{
+                            padding: '0.8rem 1rem',
+                            borderRadius: '16px',
+                            background: '#ffffff',
+                            border: '1px solid #f1f5f9',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '1rem'
+                          }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 750, color: 'var(--brand-navy)' }}>
+                                {event.title}
+                              </span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                                {evDate}
+                              </span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--accent-blue)', fontWeight: 600 }}>
+                                Hours: {event.login_time.substring(0, 5)} - {event.logout_time.substring(0, 5)}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteEvent(event.id)}
+                              className="btn-ui-secondary"
+                              style={{
+                                padding: '0.4rem 0.8rem',
+                                fontSize: '0.7rem',
+                                borderRadius: '999px',
+                                width: 'auto',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                borderColor: '#fca5a5',
+                                color: '#dc2626'
+                              }}
+                            >
+                              <Trash2 style={{ width: '12px', height: '12px' }} />
+                              Delete
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Leaves, Holidays & Events Panel (Standly & Tap Integration) */}
           <div className="ui-card" style={{
             maxWidth: '100%',
             padding: '2.25rem',
@@ -409,14 +927,14 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
               <ShieldCheck style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
-                Leaves and Holidays
+                Leaves, Holidays and Events
               </h3>
               <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', marginLeft: 'auto' }}>
-                Synced with Standly
+                Synced
               </span>
             </div>
 
-            {loadingStandly ? (
+            {loadingStandly || loadingEvents ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', gap: '8px' }}>
                 <Loader2 className="animate-spin" style={{ width: '16px', height: '16px', color: 'var(--accent-blue)', animation: 'spin 1.5s linear infinite' }} />
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>Syncing...</span>
@@ -442,7 +960,7 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
                        holidayDate.getMonth() === currentMonth;
               });
 
-              const totalCount = activeLeaves.length + upcomingHolidays.length;
+              const totalCount = activeLeaves.length + upcomingHolidays.length + companyEvents.length;
 
               if (totalCount === 0) {
                 return (
@@ -457,7 +975,7 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
                     gap: '8px'
                   }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 550 }}>
-                      🏖️ No active leaves or holidays this month.
+                      🏖️ No active leaves, holidays, or company events this month.
                     </span>
                   </div>
                 );
@@ -609,17 +1127,78 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
                       </div>
                     )}
                   </div>
+
+                  {/* Company Events Column */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                      <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#e11d48' }}></span>
+                      Company Events
+                    </h4>
+                    {companyEvents.length === 0 ? (
+                      <div style={{ padding: '0.75rem', border: '1px dashed #e2e8f0', borderRadius: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        No scheduled events.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {companyEvents.map((event, idx) => {
+                          const evDate = new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
+                          const isCurrentUserExcluded = event.excluded_users && event.excluded_users.includes(profile.id);
+
+                          return (
+                            <div key={event.id || idx} style={{
+                              padding: '0.65rem 0.85rem',
+                              borderRadius: '14px',
+                              background: isCurrentUserExcluded ? 'rgba(71, 85, 105, 0.03)' : 'rgba(225, 29, 72, 0.03)',
+                              border: isCurrentUserExcluded ? '1px solid rgba(71, 85, 105, 0.1)' : '1px solid rgba(225, 29, 72, 0.1)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '4px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                                <span style={{ fontSize: '0.8rem', fontWeight: 750, color: 'var(--brand-navy)' }}>
+                                  {event.title}
+                                </span>
+                                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                                  {evDate}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginTop: '2px' }}>
+                                <span style={{ fontSize: '0.65rem', color: isCurrentUserExcluded ? '#64748b' : '#be123c', fontWeight: 600 }}>
+                                  Hours: {event.login_time.substring(0, 5)} - {event.logout_time.substring(0, 5)}
+                                </span>
+                                <span style={{
+                                  fontSize: '0.55rem',
+                                  fontWeight: 750,
+                                  color: isCurrentUserExcluded ? '#475569' : '#e11d48',
+                                  backgroundColor: isCurrentUserExcluded ? 'rgba(71, 85, 105, 0.08)' : 'rgba(225, 29, 72, 0.08)',
+                                  padding: '1px 5px',
+                                  borderRadius: '5px',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.02em'
+                                }}>
+                                  {isCurrentUserExcluded ? 'Excluded' : 'Attending'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })()}
           </div>
 
-          {/* Two Column Layout Split */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-            gap: '2.25rem'
-          }}>
+
+
+          {/* WFH and Credentials Settings Form */}
+          <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '2.25rem' }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '2.25rem'
+            }}>
             
             {/* 2. Portal Credentials Card */}
             <div className="ui-card" style={{ maxWidth: '100%', padding: '2.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -877,6 +1456,7 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
             </button>
           </div>
         </form>
+      </div>
 
         {/* 4. Automated Testing Sandbox */}
         <div className="ui-card" style={{

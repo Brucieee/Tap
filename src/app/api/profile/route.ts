@@ -33,7 +33,8 @@ export async function GET() {
           login_time: '08:00:00',
           logout_time: '17:00:00',
           is_automation_enabled: true,
-          wfh_reason: 'Work from home'
+          wfh_reason: 'Work from home',
+          role: 'user'
         });
       }
       return NextResponse.json({ error: 'Database query failed.', details: dbError.message }, { status: 500 });
