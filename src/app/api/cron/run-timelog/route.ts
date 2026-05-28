@@ -446,6 +446,44 @@ export async function GET(request: NextRequest) {
 
           console.log('Logged in successfully. Waiting for dashboard state...');
 
+          // Format Date: Convert YYYY-MM-DD to MM/DD/YYYY
+          const [year, month, day] = currentDate.split('-');
+          const formattedDate = `${month}/${day}/${year}`;
+
+          // Check if today's timelog for the current mode already exists on the landing dashboard grid to prevent double submissions.
+          const pageText = await page.innerText('body').catch(() => '');
+          const lowerText = pageText.toLowerCase();
+          
+          // Formats to check (e.g. "05/28/2026" or "5/28/2026" or "05/28/26" or "5/28/26")
+          const cleanMonth = parseInt(month, 10).toString();
+          const cleanDay = parseInt(day, 10).toString();
+          const shortYear = year.substring(2);
+          
+          const datePatterns = [
+            `${month}/${day}/${year}`,
+            `${cleanMonth}/${cleanDay}/${year}`,
+            `${month}/${day}/${shortYear}`,
+            `${cleanMonth}/${cleanDay}/${shortYear}`
+          ];
+
+          const hasDatePattern = datePatterns.some(pat => lowerText.includes(pat));
+          const hasModeKeyword = modeParam === 'login'
+            ? (lowerText.includes('in') || lowerText.includes('login') || lowerText.includes('log in'))
+            : (lowerText.includes('out') || lowerText.includes('logout') || lowerText.includes('log out'));
+
+          if (hasDatePattern && hasModeKeyword) {
+            const skipMsg = `Skipped: Today's ${modeText} timelog already exists on the company portal grid.`;
+            console.log(`[Double Run Check] ${skipMsg}`);
+            results.push({
+              userId,
+              employeeId: decryptedEmployeeId,
+              status: 'skipped',
+              message: skipMsg
+            });
+            success = true;
+            break;
+          }
+
           // 2. Click "Add New" button to open/render the timelog submission form
           const addNewBtn = 'input[name="ctl00$ContentPlaceHolder1$Button1"][value="Add New"], #ctl00_ContentPlaceHolder1_Button1';
           console.log('Locating and clicking "Add New" timelog form button...');
@@ -462,9 +500,6 @@ export async function GET(request: NextRequest) {
           const typeSelect = 'select[name="ctl00$ContentPlaceHolder1$drp_type"], #ctl00_ContentPlaceHolder1_drp_type';
           await page.waitForSelector(typeSelect, { timeout: 10000 });
 
-          // Format Date: Convert YYYY-MM-DD to MM/DD/YYYY
-          const [year, month, day] = currentDate.split('-');
-          const formattedDate = `${month}/${day}/${year}`;
           console.log(`Injecting form variables: Date=${formattedDate}, Time=${timeToInject}, Mode=${modeText}`);
 
           // Type: "Correction"
