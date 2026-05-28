@@ -1,14 +1,31 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
-import { createClient } from '@/utils/supabase/server';
-import { ArrowRight } from 'lucide-react';
+import { createClient } from '@/utils/supabase/client';
+import { ArrowRight, Loader2 } from 'lucide-react';
+import BatEffect from '@/components/effects/BatEffect';
 
-export const dynamic = 'force-dynamic';
+export default function Home() {
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [triggerBatEffect, setTriggerBatEffect] = useState(false);
 
-export default async function Home() {
-  const supabase = await createClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  useEffect(() => {
+    const fetchSession = async () => {
+      const supabase = createClient();
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      setSession(currentSession);
+      setLoading(false);
+    };
+    fetchSession();
+  }, []);
+
+  const triggerBats = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setTriggerBatEffect(true);
+  };
 
   return (
     <div style={{
@@ -27,6 +44,8 @@ export default async function Home() {
       position: 'relative',
       overflow: 'hidden'
     }}>
+      <BatEffect trigger={triggerBatEffect} setTrigger={setTriggerBatEffect} />
+
       {/* Dynamic drifting background ambient disks */}
       <div 
         className="floating-disk-1"
@@ -59,9 +78,26 @@ export default async function Home() {
 
       {/* Header Navigation */}
       <header className="hero-header">
-        {/* Render text-only Logo on navbar by disabling showClock */}
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+        {/* Render text-only Logo on navbar with Bruce Wayne signature easter egg */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Logo showClock={false} showText={true} textColor="var(--brand-navy)" />
+          <span 
+            onClick={triggerBats}
+            style={{
+              fontSize: '9px',
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.15em',
+              color: 'var(--accent-blue)',
+              marginTop: '-0.1rem',
+              cursor: 'pointer',
+              userSelect: 'none',
+              transition: 'color 0.2s ease-in-out'
+            }}
+            className="bruce-wayne-easter"
+          >
+            by Bruce Wayne
+          </span>
         </div>
       </header>
 
@@ -79,34 +115,37 @@ export default async function Home() {
               Be on time.
             </span>
           </h1>
-
-          <p className="hero-subtitle">
-            Say goodbye to manual WFH attendance. Secure, automated timelogs synced with Standly, running seamlessly in the background.
-          </p>
  
           <div className="hero-cta-container">
-            <Link 
-              href={session ? "/dashboard" : "/login"} 
-              className="hero-cta-btn"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.65rem',
-                backgroundColor: 'var(--brand-navy)',
-                color: '#ffffff',
-                padding: '0.95rem 2.25rem',
-                borderRadius: '30px',
-                fontWeight: 700,
-                fontSize: '1.05rem',
-                textDecoration: 'none',
-                boxShadow: '0 10px 20px rgba(17, 51, 85, 0.2)'
-              }}
-            >
-              {session ? 'Go to Dashboard' : 'Get Started Now'} 
-              <span className="cta-arrow" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                <ArrowRight style={{ width: '18px', height: '18px', strokeWidth: 2.5 }} />
-              </span>
-            </Link>
+            {loading ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.95rem 2.25rem' }}>
+                <Loader2 className="animate-spin" style={{ width: '16px', height: '16px', color: 'var(--brand-navy)', animation: 'spin 1.5s linear infinite' }} />
+                <span style={{ fontSize: '0.95rem', color: 'var(--text-muted)', fontWeight: 600 }}>Syncing session...</span>
+              </div>
+            ) : (
+              <Link 
+                href={session ? "/dashboard" : "/login"} 
+                className="hero-cta-btn"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.65rem',
+                  backgroundColor: 'var(--brand-navy)',
+                  color: '#ffffff',
+                  padding: '0.95rem 2.25rem',
+                  borderRadius: '30px',
+                  fontWeight: 700,
+                  fontSize: '1.05rem',
+                  textDecoration: 'none',
+                  boxShadow: '0 10px 20px rgba(17, 51, 85, 0.2)'
+                }}
+              >
+                {session ? 'Go to Dashboard' : 'Get Started Now'} 
+                <span className="cta-arrow" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                  <ArrowRight style={{ width: '18px', height: '18px', strokeWidth: 2.5 }} />
+                </span>
+              </Link>
+            )}
           </div>
         </div>
 
@@ -146,6 +185,19 @@ export default async function Home() {
           </Link>
         </div>
       </main>
+      
+      <style jsx global>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+        .bruce-wayne-easter:hover {
+          color: var(--brand-navy) !important;
+          text-shadow: 0 0 8px rgba(41, 116, 166, 0.25);
+        }
+      `}</style>
     </div>
   );
 }

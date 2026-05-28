@@ -679,11 +679,11 @@ body {
   .hero-main {
     display: flex;
     flex-direction: column;
-    gap: 2.25rem;
+    gap: 1.75rem;
     padding: 1rem 1.5rem 3rem 1.5rem;
     text-align: center;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
   }
 
   .hero-content {
@@ -710,7 +710,7 @@ body {
 
   .hero-clock-wrapper {
     order: -1; /* Place the beautiful logo clock at the top on mobile screens! */
-    margin-top: 0.5rem;
+    margin-top: -1rem;
     margin-bottom: 0.5rem;
   }
 
