@@ -21,3 +21,25 @@ export function createAdminClient() {
     }
   );
 }
+
+export function createStandlyAdminClient() {
+  const supabaseUrl = process.env.STANDLY_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.STANDLY_SUPABASE_SRK;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.warn(
+      'WARNING: STANDLY_PUBLIC_SUPABASE_URL or STANDLY_SUPABASE_SRK is missing. Standly operations will fail.'
+    );
+  }
+
+  return createBaseClient(
+    supabaseUrl || '',
+    serviceRoleKey || '',
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    }
+  );
+}

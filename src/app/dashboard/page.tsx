@@ -48,6 +48,11 @@ export default function DashboardPage() {
   const [isLocked, setIsLocked] = useState(true);
   const [triggerBatEffect, setTriggerBatEffect] = useState(false);
 
+  // Standly Integration State
+  const [leaves, setLeaves] = useState<any[]>([]);
+  const [holidays, setHolidays] = useState<any[]>([]);
+  const [loadingStandly, setLoadingStandly] = useState(true);
+
   const router = useRouter();
   const supabase = createClient();
 
@@ -90,6 +95,20 @@ export default function DashboardPage() {
         setMessage({ text: 'Failed to load configuration.', type: 'error' });
       } finally {
         setLoading(false);
+      }
+
+      // Fetch leaves and holidays from Standly
+      try {
+        const response = await fetch('/api/standly-info');
+        if (response.ok) {
+          const data = await response.json();
+          setLeaves(data.leaves || []);
+          setHolidays(data.holidays || []);
+        }
+      } catch (error) {
+        console.error('Failed to load Standly data:', error);
+      } finally {
+        setLoadingStandly(false);
       }
     };
 
@@ -367,6 +386,222 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
                 }}></span>
               </label>
             </div>
+          </div>
+
+          {/* Leaves & Holidays Panel (Standly Integration) */}
+          <div className="ui-card" style={{
+            maxWidth: '100%',
+            padding: '2.25rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.5rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+              <ShieldCheck style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
+                Leaves and Holidays
+              </h3>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', marginLeft: 'auto' }}>
+                Synced with Standly
+              </span>
+            </div>
+
+            {loadingStandly ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', gap: '8px' }}>
+                <Loader2 className="animate-spin" style={{ width: '16px', height: '16px', color: 'var(--accent-blue)', animation: 'spin 1.5s linear infinite' }} />
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>Syncing...</span>
+              </div>
+            ) : (() => {
+              const today = new Date();
+              today.setHours(0,0,0,0);
+
+              const currentYear = today.getFullYear();
+              const currentMonth = today.getMonth();
+
+              const activeLeaves = leaves.filter((leave: any) => {
+                const endDate = new Date(leave.end_date);
+                endDate.setHours(23, 59, 59, 999);
+                return endDate >= today;
+              });
+
+              const upcomingHolidays = holidays.filter((holiday: any) => {
+                const holidayDate = new Date(holiday.date);
+                holidayDate.setHours(0, 0, 0, 0);
+                return holidayDate >= today && 
+                       holidayDate.getFullYear() === currentYear && 
+                       holidayDate.getMonth() === currentMonth;
+              });
+
+              const totalCount = activeLeaves.length + upcomingHolidays.length;
+
+              if (totalCount === 0) {
+                return (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0.75rem 1rem',
+                    backgroundColor: 'rgba(41, 116, 166, 0.04)',
+                    borderRadius: '16px',
+                    border: '1px dashed rgba(41, 116, 166, 0.15)',
+                    gap: '8px'
+                  }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 550 }}>
+                      🏖️ No active leaves or holidays this month.
+                    </span>
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                  gap: '1.25rem'
+                }}>
+                  {/* My Leaves Column */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                      <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', backgroundColor: 'var(--accent-orange)' }}></span>
+                      Active Leaves
+                    </h4>
+                    {activeLeaves.length === 0 ? (
+                      <div style={{ padding: '0.75rem', border: '1px dashed #e2e8f0', borderRadius: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        No active leaves.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {activeLeaves.map((leave, idx) => {
+                          let badgeBg = '#f1f5f9';
+                          let badgeColor = '#475569';
+                          let typeLabel = leave.type;
+                          
+                          switch (leave.type?.toLowerCase()) {
+                            case 'vacation':
+                              badgeBg = '#ecfdf5';
+                              badgeColor = '#059669';
+                              typeLabel = '🏖️ Vacation';
+                              break;
+                            case 'sick':
+                              badgeBg = '#fef2f2';
+                              badgeColor = '#dc2626';
+                              typeLabel = '🤒 Sick';
+                              break;
+                            case 'personal':
+                              badgeBg = '#fef3c7';
+                              badgeColor = '#d97706';
+                              typeLabel = '🏠 Personal';
+                              break;
+                            case 'wellness':
+                              badgeBg = '#f0fdf4';
+                              badgeColor = '#16a34a';
+                              typeLabel = '🧘 Wellness';
+                              break;
+                            case 'birthday':
+                              badgeBg = '#fdf2f8';
+                              badgeColor = '#db2777';
+                              typeLabel = '🎂 Birthday';
+                              break;
+                          }
+
+                          const start = new Date(leave.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                          const end = new Date(leave.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                          const dateText = start === end ? start : `${start} - ${end}`;
+
+                          return (
+                            <div key={leave.id || idx} style={{
+                              padding: '0.65rem 0.85rem',
+                              borderRadius: '14px',
+                              background: '#ffffff',
+                              border: '1px solid #f1f5f9',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.01)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '4px',
+                              cursor: 'default'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                                <span style={{
+                                  fontSize: '0.7rem',
+                                  fontWeight: 700,
+                                  padding: '2px 8px',
+                                  borderRadius: '999px',
+                                  backgroundColor: badgeBg,
+                                  color: badgeColor
+                                }}>
+                                  {typeLabel}
+                                </span>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 550 }}>
+                                  {dateText}
+                                </span>
+                              </div>
+                              {leave.reason && (
+                                <p style={{ fontSize: '0.75rem', color: 'var(--text-primary)', margin: 0, fontStyle: 'italic', lineHeight: '1.3' }}>
+                                  "{leave.reason}"
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Company Holidays Column */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                      <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', backgroundColor: 'var(--accent-blue)' }}></span>
+                      Holidays this Month
+                    </h4>
+                    {upcomingHolidays.length === 0 ? (
+                      <div style={{ padding: '0.75rem', border: '1px dashed #e2e8f0', borderRadius: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        No holidays this month.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {upcomingHolidays.map((holiday, idx) => {
+                          const hDate = new Date(holiday.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
+
+                          return (
+                            <div key={holiday.id || idx} style={{
+                              padding: '0.65rem 0.85rem',
+                              borderRadius: '14px',
+                              background: 'rgba(41, 116, 166, 0.03)',
+                              border: '1px solid rgba(41, 116, 166, 0.1)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '0.5rem'
+                            }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--brand-navy)' }}>
+                                  {holiday.name}
+                                </span>
+                                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                                  {hDate}
+                                </span>
+                              </div>
+                              <span style={{
+                                fontSize: '0.6rem',
+                                fontWeight: 750,
+                                color: 'var(--accent-blue)',
+                                backgroundColor: 'rgba(41, 116, 166, 0.08)',
+                                padding: '1px 6px',
+                                borderRadius: '6px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.02em'
+                              }}>
+                                Active
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Two Column Layout Split */}

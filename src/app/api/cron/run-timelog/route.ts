@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/utils/supabase/admin';
+import { createAdminClient, createStandlyAdminClient } from '@/utils/supabase/admin';
 import { createClient } from '@/utils/supabase/server';
 import { decrypt } from '@/utils/encryption';
 
@@ -60,12 +60,14 @@ export async function GET(request: NextRequest) {
   // Try to authenticate using the user's standard session cookies if triggered from the dashboard sandbox
   let supabase;
   let isUserSession = false;
+  let sessionUser: any = null;
   try {
     const userClient = await createClient();
     const { data: { user } } = await userClient.auth.getUser();
     if (user) {
       supabase = userClient;
       isUserSession = true;
+      sessionUser = user;
       console.log(`[Sandbox Execution] Found authenticated user session for ID: ${user.id}`);
     }
   } catch (cookieErr) {
@@ -83,6 +85,84 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // 1. Fetch Tap users via a dedicated admin client to map user_id to actual email
+    const tapUserEmails = new Map<string, string>();
+    if (sessionUser && sessionUser.email) {
+      tapUserEmails.set(sessionUser.id, sessionUser.email.toLowerCase());
+    }
+
+    try {
+      const adminClient = createAdminClient();
+      const { data: authData, error: authUsersError } = await adminClient.auth.admin.listUsers();
+      if (authUsersError) {
+        console.error('Failed to list Tap users for email mapping:', authUsersError);
+      } else if (authData?.users) {
+        authData.users.forEach((u: any) => {
+          if (u.email) {
+            tapUserEmails.set(u.id, u.email.toLowerCase());
+          }
+        });
+      }
+    } catch (adminErr) {
+      console.error('Exception during admin listing Tap users:', adminErr);
+    }
+
+    // 2. Fetch Standly holidays, profiles, and leaves securely
+    let holidays: any[] = [];
+    let standlyProfiles: any[] = [];
+    let standlyLeaves: any[] = [];
+    
+    try {
+      const standlySupabase = createStandlyAdminClient();
+      
+      const [holidaysRes, profilesRes, leavesRes] = await Promise.all([
+        standlySupabase.from('holidays').select('*'),
+        standlySupabase.from('profiles').select('id, email'),
+        standlySupabase.from('leaves').select('*')
+      ]);
+
+      if (holidaysRes.error) console.error('Error fetching Standly holidays in scheduler:', holidaysRes.error);
+      else holidays = holidaysRes.data || [];
+
+      if (profilesRes.error) console.error('Error fetching Standly profiles in scheduler:', profilesRes.error);
+      else standlyProfiles = profilesRes.data || [];
+
+      if (leavesRes.error) console.error('Error fetching Standly leaves in scheduler:', leavesRes.error);
+      else standlyLeaves = leavesRes.data || [];
+
+    } catch (standlyErr) {
+      console.error('Failed to query Standly database in scheduler:', standlyErr);
+    }
+
+    // Check if currentDate is a holiday
+    const matchedHoliday = holidays.find((h: any) => h.date === currentDate);
+    const isManualTest = searchParams.get('test') === 'true' || isUserSession;
+
+    if (matchedHoliday) {
+      const msg = `Skipped: Today (${currentDate}) is a holiday in Standly: ${matchedHoliday.name}.`;
+      console.log(`[Cron Job] ${msg}`);
+      return NextResponse.json({
+        message: msg,
+        summary: {
+          total: 0,
+          success: 0,
+          failed: 0,
+          skipped: 0
+        },
+        mode: modeText,
+        dayEvaluated: currentDay,
+        dateEvaluated: currentDate,
+        results: [
+          {
+            userId: 'Holiday',
+            employeeId: 'N/A',
+            status: 'skipped',
+            message: msg
+          }
+        ]
+      });
+    }
+
     // Fetch profiles
     let profiles;
     let dbError;
@@ -120,6 +200,9 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(`[Cron Job Started] Mode: ${modeText} | Day: ${currentDay} | Date: ${currentDate}`);
+    if (matchedHoliday && isManualTest) {
+      console.log(`[Warning] Today is a holiday (${matchedHoliday.name}), but running anyway because this is a manual test run.`);
+    }
     console.log(`Found ${profiles.length} active automation profiles. Evaluating schedules...`);
 
     // 2. Launch browser (Remote CDP on Vercel if URL is provided, otherwise local headless Chromium)
@@ -190,6 +273,49 @@ export async function GET(request: NextRequest) {
     for (const profile of profiles) {
       const userId = profile.id;
       
+      // Get Tap user email to match with Standly profile for leaves
+      const userEmailStr = tapUserEmails.get(userId);
+      let isUserOnLeave = false;
+      let leaveReason = '';
+      
+      if (userEmailStr && standlyProfiles.length > 0 && standlyLeaves.length > 0) {
+        const standlyProfile = standlyProfiles.find(
+          (p: any) => p.email && p.email.toLowerCase() === userEmailStr.toLowerCase()
+        );
+        
+        if (standlyProfile) {
+          const userLeave = standlyLeaves.find((l: any) => {
+            if (l.user_id !== standlyProfile.id) return false;
+            
+            // Check if date matches
+            const isDateMatched = currentDate >= l.start_date && currentDate <= l.end_date;
+            if (!isDateMatched) return false;
+
+            // Check if time matches current login/logout mode for half-day leaves
+            if (l.start_time && l.end_time) {
+              if (modeParam === 'login') {
+                // Morning leave covers the login mode (starts before 12:00 PM)
+                return l.start_time < '12:00:00';
+              } else {
+                // Afternoon leave covers the logout mode (ends after 12:00 PM)
+                return l.end_time > '12:00:00';
+              }
+            }
+
+            // Full-day leave
+            return true;
+          });
+          
+          if (userLeave) {
+            isUserOnLeave = true;
+            const timeInfo = (userLeave.start_time && userLeave.end_time)
+              ? ` (Half-day: ${userLeave.start_time.substring(0, 5)} - ${userLeave.end_time.substring(0, 5)})`
+              : '';
+            leaveReason = (userLeave.reason || userLeave.type || 'On leave') + timeInfo;
+          }
+        }
+      }
+
       // Decrypt credentials
       const encryptedEmployeeId = profile.employee_id;
       const encryptedPassword = profile.company_password;
@@ -205,9 +331,28 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
+      const isManualTest = searchParams.get('test') === 'true' || isUserSession;
+
+      // Handle Holiday skip for manual tests logging
+      if (matchedHoliday && isManualTest) {
+        console.log(`[Profile Evaluation] User ${userId}: Holiday Warning - Today is a holiday: ${matchedHoliday.name}.`);
+      }
+
+      // Check Standly Leave skip
+      if (isUserOnLeave) {
+        console.log(`[Profile Evaluation] User ${userId}: Skipped - User is on leave (${leaveReason}).`);
+        const decryptedEmployeeId = decrypt(encryptedEmployeeId);
+        results.push({
+          userId,
+          employeeId: decryptedEmployeeId || 'Configured',
+          status: 'skipped',
+          message: `Skipped: User is on leave [${leaveReason}].`
+        });
+        continue;
+      }
+
       // Check WFH schedule match
       // Skip this check if running manually triggered test from the dashboard
-      const isManualTest = searchParams.get('test') === 'true' || isUserSession;
       const wfhDays = profile.wfh_days || [];
       const isWfhDay = wfhDays.some((day: string) => day.toLowerCase() === currentDay.toLowerCase());
 

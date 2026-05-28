@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tap - Automated Attendance & WFH Timelog Engine",
+  title: "Tap",
   description: "A secure, set-it-and-forget-it automated work attendance and WFH logging manager, integrated with Supabase and Playwright.",
   authors: [{ name: "Antigravity Team" }],
   keywords: ["Playwright", "Supabase", "Attendance", "Timelog", "WFH", "Automation"],
