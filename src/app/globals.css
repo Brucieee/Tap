@@ -409,5 +409,111 @@ body {
   transition: transform 0.2s ease-in-out;
 }
 
+/* Responsive Landing Page Classes */
+.hero-header {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 10;
+  position: relative;
+}
 
+.hero-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 4rem 2rem 6rem 2rem;
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  align-items: center;
+  gap: 4rem;
+  z-index: 10;
+  position: relative;
+}
 
+.hero-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.hero-title {
+  font-size: 4.25rem;
+  font-weight: 850;
+  line-height: 1.15;
+  font-family: var(--font-title);
+  color: var(--brand-navy);
+  letter-spacing: -0.03em;
+}
+
+.hero-cta-container {
+  display: flex;
+  gap: 1rem;
+}
+
+.hero-clock-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+/* Mobile Media Queries for Landing Page */
+@media (max-width: 968px) {
+  .hero-header {
+    padding: 1.5rem 1.25rem;
+  }
+
+  .hero-main {
+    grid-template-columns: 1fr;
+    gap: 3.5rem;
+    padding: 2rem 1.5rem 4rem 1.5rem;
+    text-align: center;
+  }
+
+  .hero-content {
+    align-items: center;
+    gap: 1.75rem;
+  }
+
+  .hero-title {
+    font-size: 3rem;
+  }
+
+  .hero-cta-container {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .hero-clock-wrapper {
+    order: -1; /* Place the beautiful logo clock at the top on mobile screens! */
+  }
+
+  .floating-disk-1, .floating-disk-2 {
+    width: 320px !important;
+    height: 320px !important;
+    opacity: 0.6;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-title {
+    font-size: 2.35rem;
+    line-height: 1.25;
+  }
+
+  .hero-clock-container svg {
+    width: 220px !important;
+    height: 220px !important;
+  }
+
+  .hero-clock-shadow {
+    width: 180px !important;
+    height: 180px !important;
+  }
+}

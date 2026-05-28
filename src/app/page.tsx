@@ -58,67 +58,18 @@ export default async function Home() {
       />
 
       {/* Header Navigation */}
-      <header style={{
-        width: '100%',
-        maxWidth: '1200px',
-        margin: '0 auto',
-        padding: '2rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        zIndex: 10,
-        position: 'relative'
-      }}>
+      <header className="hero-header">
         {/* Render text-only Logo on navbar by disabling showClock */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <Logo showClock={false} showText={true} textColor="var(--brand-navy)" />
         </div>
-        
-        <div>
-          {session && (
-            <Link href="/dashboard" style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              backgroundColor: 'var(--brand-navy)',
-              color: '#ffffff',
-              padding: '0.65rem 1.35rem',
-              borderRadius: '24px',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              textDecoration: 'none',
-              boxShadow: '0 4px 12px rgba(17, 51, 85, 0.15)'
-            }}>
-              Go to Dashboard <ArrowRight style={{ width: '16px', height: '16px' }} />
-            </Link>
-          )}
-        </div>
       </header>
 
       {/* Hero Section */}
-      <main style={{
-        flex: 1,
-        width: '100%',
-        maxWidth: '1200px',
-        margin: '0 auto',
-        padding: '4rem 2rem 6rem 2rem',
-        display: 'grid',
-        gridTemplateColumns: '1.2fr 0.8fr',
-        alignItems: 'center',
-        gap: '4rem',
-        zIndex: 10,
-        position: 'relative'
-      }}>
+      <main className="hero-main">
         {/* Hero content */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          <h1 style={{
-            fontSize: '4.25rem',
-            fontWeight: 850,
-            lineHeight: 1.15,
-            fontFamily: 'var(--font-title)',
-            color: 'var(--brand-navy)',
-            letterSpacing: '-0.03em'
-          }}>
+        <div className="hero-content">
+          <h1 className="hero-title">
             Automated Attendance. <br />
             <span style={{
               background: 'linear-gradient(135deg, var(--brand-navy) 0%, #2974a6 100%)',
@@ -128,8 +79,8 @@ export default async function Home() {
               Be on time.
             </span>
           </h1>
-
-          <div style={{ display: 'flex', gap: '1rem' }}>
+ 
+          <div className="hero-cta-container">
             <Link 
               href={session ? "/dashboard" : "/login"} 
               className="hero-cta-btn"
@@ -156,14 +107,9 @@ export default async function Home() {
         </div>
 
         {/* Hero Clock (Increased size, styled in premium Brand Navy color scheme) */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          position: 'relative'
-        }}>
+        <div className="hero-clock-wrapper">
           {/* Subtle clean shadows underneath */}
-          <div style={{
+          <div className="hero-clock-shadow" style={{
             position: 'absolute',
             width: '240px',
             height: '240px',
