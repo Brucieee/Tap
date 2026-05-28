@@ -302,15 +302,25 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
           paddingBottom: '0.5rem',
           borderBottom: '1px solid rgba(226, 232, 240, 0.5)'
         }}>
-          <div>
-            <h2 style={{ fontSize: '1.85rem', fontWeight: 800, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', letterSpacing: '-0.02em', margin: 0 }}>Tap</h2>
-            <p
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <Logo showClock={false} showText={true} textColor="var(--brand-navy)" />
+            <span 
               onClick={triggerBats}
+              style={{
+                fontSize: '9px',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.15em',
+                color: 'var(--accent-blue)',
+                marginTop: '-0.1rem',
+                cursor: 'pointer',
+                userSelect: 'none',
+                transition: 'color 0.2s ease-in-out'
+              }}
               className="bruce-wayne-easter"
-              style={{ fontSize: '10px', color: 'var(--accent-blue)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.12em', cursor: 'pointer', userSelect: 'none', margin: '2px 0 0 0', transition: 'all 0.2s', display: 'inline-block' }}
             >
               by Bruce Wayne
-            </p>
+            </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
