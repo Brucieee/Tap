@@ -960,7 +960,13 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
                        holidayDate.getMonth() === currentMonth;
               });
 
-              const totalCount = activeLeaves.length + upcomingHolidays.length + companyEvents.length;
+              const activeCompanyEvents = companyEvents.filter((event: any) => {
+                const eventDate = new Date(event.date);
+                eventDate.setHours(0, 0, 0, 0);
+                return eventDate >= today;
+              });
+
+              const totalCount = activeLeaves.length + upcomingHolidays.length + activeCompanyEvents.length;
 
               if (totalCount === 0) {
                 return (
@@ -1134,13 +1140,13 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
                       <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#e11d48' }}></span>
                       Company Events
                     </h4>
-                    {companyEvents.length === 0 ? (
+                    {activeCompanyEvents.length === 0 ? (
                       <div style={{ padding: '0.75rem', border: '1px dashed #e2e8f0', borderRadius: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                         No scheduled events.
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {companyEvents.map((event, idx) => {
+                        {activeCompanyEvents.map((event, idx) => {
                           const evDate = new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
                           const isCurrentUserExcluded = event.excluded_users && event.excluded_users.includes(profile.id);
 

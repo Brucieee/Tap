@@ -396,6 +396,33 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
+      // Check database for existing successful submission today
+      try {
+        const { data: dbLog, error: dbLogError } = await supabase
+          .from('timelog_history')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('date', currentDate)
+          .eq('mode', modeParam)
+          .limit(1);
+
+        if (dbLogError) {
+          console.warn(`[Database History Check Warning] Failed to query timelog_history for user ${userId}:`, dbLogError.message);
+        } else if (!isManualTest && dbLog && dbLog.length > 0) {
+          const skipMsg = `Skipped: Today's ${modeText} timelog already exists in Tap database history (submitted at ${dbLog[0].created_at}).`;
+          console.log(`[Database History Check] ${skipMsg}`);
+          results.push({
+            userId,
+            employeeId: decryptedEmployeeId,
+            status: 'skipped',
+            message: skipMsg
+          });
+          continue;
+        }
+      } catch (err: any) {
+        console.warn(`[Database History Check Exception] Gracefully falling back to browser scraping check:`, err.message);
+      }
+
       // Check for global company event overriding standard hours on this specific date
       const matchedEvent = companyEvents.find((e: any) => e.date === currentDate);
       const isExcludedFromEvent = matchedEvent && matchedEvent.excluded_users && matchedEvent.excluded_users.includes(userId);
@@ -497,8 +524,8 @@ export async function GET(request: NextRequest) {
 
           const hasDatePattern = datePatterns.some(pat => lowerText.includes(pat));
           const hasModeKeyword = modeParam === 'login'
-            ? (lowerText.includes('in') || lowerText.includes('login') || lowerText.includes('log in'))
-            : (lowerText.includes('out') || lowerText.includes('logout') || lowerText.includes('log out'));
+            ? /\b(in|login|log in|time in|clock in)\b/i.test(lowerText)
+            : /\b(out|logout|log out|time out|clock out)\b/i.test(lowerText);
 
           if (hasDatePattern && hasModeKeyword) {
             const skipMsg = `Skipped: Today's ${modeText} timelog already exists on the company portal grid.`;
@@ -571,6 +598,25 @@ export async function GET(request: NextRequest) {
           await page.waitForTimeout(3000); 
 
           console.log(`Timelog ${modeText} submission completed successfully for user ${userId}.`);
+
+          // Save success status to local DB history
+          try {
+            const { error: insertError } = await supabase
+              .from('timelog_history')
+              .insert({
+                user_id: userId,
+                employee_id: decryptedEmployeeId,
+                mode: modeParam,
+                date: currentDate
+              });
+            if (insertError) {
+              console.warn(`[Database History Update Warning] Failed to insert history record for user ${userId}:`, insertError.message);
+            } else {
+              console.log(`[Database History Update] Successfully recorded submission in database history for user ${userId}.`);
+            }
+          } catch (insertErr: any) {
+            console.warn(`[Database History Update Exception] Failed to insert history record:`, insertErr.message);
+          }
 
           results.push({
             userId,
