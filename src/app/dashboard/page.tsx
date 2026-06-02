@@ -1764,26 +1764,26 @@ export default function DashboardPage() {
                                 {cell.day}
                               </span>
                               
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexGrow: 1, justifyContent: 'flex-start' }}>
+                              <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '3px', flexGrow: 1, justifyContent: 'flex-start', alignItems: 'flex-start' }}>
                                 {dayLogs.map((log: any, idx: number) => {
                                   const isTimeIn = log.mode.toLowerCase().includes('in');
                                   
                                   return (
                                     <div key={idx} style={{
-                                      fontSize: '0.58rem',
+                                      fontSize: '0.55rem',
                                       fontWeight: 800,
-                                      padding: '2.5px 5px',
-                                      borderRadius: '4px',
-                                      backgroundColor: isTimeIn ? '#f0fdf4' : '#fef2f2',
-                                      color: isTimeIn ? '#16a34a' : '#dc2626',
-                                      display: 'flex',
+                                      padding: '1.5px 5px',
+                                      borderRadius: '999px',
+                                      backgroundColor: isTimeIn ? '#e2fbe8' : '#fde2e2',
+                                      color: isTimeIn ? '#15803d' : '#b91c1c',
+                                      display: 'inline-flex',
                                       alignItems: 'center',
-                                      justifyContent: 'space-between',
                                       gap: '2px',
                                       border: '1px solid',
-                                      borderColor: isTimeIn ? 'rgba(22, 163, 74, 0.15)' : 'rgba(220, 38, 38, 0.15)'
+                                      borderColor: isTimeIn ? 'rgba(21, 128, 61, 0.2)' : 'rgba(185, 28, 28, 0.2)',
+                                      whiteSpace: 'nowrap'
                                     }}>
-                                      <span>{isTimeIn ? 'In' : 'Out'}</span>
+                                      <span>{isTimeIn ? 'In' : 'Out'}:</span>
                                       <span>{log.time}</span>
                                     </div>
                                   );
