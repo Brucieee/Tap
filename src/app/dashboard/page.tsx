@@ -229,7 +229,7 @@ export default function DashboardPage() {
 
     // 2. Loop through the last 7 calendar days (excluding today)
     const today = new Date();
-    const missedDatesToRecover: string[] = [];
+    const missedDatesToRecover: Array<{ date: string; mode: 'login' | 'logout' }> = [];
 
     for (let i = 1; i <= 7; i++) {
       const pastDate = new Date();
@@ -248,37 +248,52 @@ export default function DashboardPage() {
       const hasTimeIn = dayEntries.some(log => log.mode.toLowerCase().includes('in'));
       const hasTimeOut = dayEntries.some(log => log.mode.toLowerCase().includes('out'));
 
-      if (hasTimeIn && !hasTimeOut && !attemptedRecoveriesRef.current.has(dateKey)) {
+      // Check if this date was configured as WFH day
+      const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const pastWeekdayName = WEEKDAY_NAMES[dayOfWeek];
+      const isWfhDayForPastDate = profile.wfh_days && profile.wfh_days.includes(pastWeekdayName);
+
+      if (hasTimeIn && !hasTimeOut && !attemptedRecoveriesRef.current.has(`${dateKey}-logout`)) {
         // Found a missed timeout! Add to queue and mark as attempted to prevent recursion loops
-        attemptedRecoveriesRef.current.add(dateKey);
-        missedDatesToRecover.push(dateKey);
+        attemptedRecoveriesRef.current.add(`${dateKey}-logout`);
+        missedDatesToRecover.push({ date: dateKey, mode: 'logout' });
+      } else if (!hasTimeIn && !hasTimeOut && isWfhDayForPastDate && !attemptedRecoveriesRef.current.has(`${dateKey}-login`)) {
+        // Found a missed workday completely (both in and out are missing), and WFH was scheduled!
+        // Start by recovering the login first!
+        attemptedRecoveriesRef.current.add(`${dateKey}-login`);
+        missedDatesToRecover.push({ date: dateKey, mode: 'login' });
       }
     }
 
     if (missedDatesToRecover.length > 0) {
-      const targetDate = missedDatesToRecover[0]; // Recover the most recent one first
-      console.log(`[Auto-Recovery] Triggering Time Out auto-recovery for missed workday: ${targetDate}`);
+      const target = missedDatesToRecover[0]; // Recover the most recent one first
+      const targetDate = target.date;
+      const targetMode = target.mode;
+      const modeLabel = targetMode === 'login' ? 'Time In' : 'Time Out';
+      const apiMode = targetMode === 'login' ? 'login' : 'logout';
+      
+      console.log(`[Auto-Recovery] Triggering ${modeLabel} auto-recovery for missed workday: ${targetDate}`);
       setRecoveryStatus({ date: targetDate, state: 'running' });
-      addToast(`Detected missing Time Out for workday ${targetDate}. Running self-healing auto-recovery...`, targetDate, 'info');
+      addToast(`Detected missing ${modeLabel} for workday ${targetDate}. Running self-healing auto-recovery...`, targetDate, 'info');
       
       try {
-        const res = await fetch(`/api/cron/run-timelog?mode=logout&date=${targetDate}`);
+        const res = await fetch(`/api/cron/run-timelog?mode=${apiMode}&date=${targetDate}`);
         if (res.ok) {
           const data = await res.json();
           setRecoveryStatus({ date: targetDate, state: 'success' });
-          addToast(`Successfully recovered missed Time Out for workday ${targetDate}!`, targetDate, 'success');
-          console.log('[Auto-Recovery] Timeout recovered successfully:', data);
-          // Re-sync logs from portal to instantly reflect the new Time Out on dashboard
+          addToast(`Successfully recovered missed ${modeLabel} for workday ${targetDate}!`, targetDate, 'success');
+          console.log(`[Auto-Recovery] ${modeLabel} recovered successfully:`, data);
+          // Re-sync logs from portal to instantly reflect the new entry on dashboard
           handleSyncPortalLogs();
         } else {
           setRecoveryStatus({ date: targetDate, state: 'failed' });
-          addToast(`Failed to auto-recover missed Time Out for workday ${targetDate}.`, targetDate, 'failed');
-          console.error('[Auto-Recovery] Failed to recover missed Time Out.');
+          addToast(`Failed to auto-recover missed ${modeLabel} for workday ${targetDate}.`, targetDate, 'failed');
+          console.error(`[Auto-Recovery] Failed to recover missed ${modeLabel}.`);
         }
       } catch (err) {
         setRecoveryStatus({ date: targetDate, state: 'failed' });
-        addToast(`Failed to auto-recover missed Time Out for workday ${targetDate}.`, targetDate, 'failed');
-        console.error('[Auto-Recovery] Error during auto-recovery execution:', err);
+        addToast(`Failed to auto-recover missed ${modeLabel} for workday ${targetDate}.`, targetDate, 'failed');
+        console.error(`[Auto-Recovery] Error during auto-recovery execution:`, err);
       } finally {
         setTimeout(() => setRecoveryStatus(null), 5000);
       }
