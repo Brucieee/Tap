@@ -44,6 +44,7 @@ if (typeof global !== 'undefined') {
 }
 
 async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParams) {
+  let browser: any = null;
   
   // Security check: Verify a cron secret token to prevent unauthorized triggers
   const authHeader = request.headers.get('authorization');
@@ -291,7 +292,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
     }
 
     const { chromium } = playwright;
-    let browser: any = null;
+    browser = null;
     if (remoteUrl) {
       let formattedUrl = remoteUrl;
       // Auto-format Browserless.io URL if user provided root path
@@ -766,10 +767,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       }
     }
 
-    // Close the browser when done
-    if (browser) {
-      await browser.close();
-    }
+
 
     // 4. Final summary and response
     const successCount = results.filter(r => r.status === 'success').length;
@@ -799,6 +797,11 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       { error: 'Internal Server Error during cron processing', details: error.message },
       { status: 500 }
     );
+  } finally {
+    if (browser) {
+      await browser.close().catch(() => {});
+      console.log('Successfully closed and released Playwright Browser connection for cron route.');
+    }
   }
 }
 

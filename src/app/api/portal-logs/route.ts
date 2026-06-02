@@ -6,6 +6,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Extend serverless execution limit to 60 seconds
 
 export async function GET(request: NextRequest) {
+  let browser: any = null;
+  let context: any = null;
   try {
     // 1. Authenticate User Session
     const supabase = await createClient();
@@ -50,7 +52,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { chromium } = playwright;
-    let browser: any = null;
+    browser = null;
 
     if (remoteUrl) {
       let formattedUrl = remoteUrl;
@@ -107,7 +109,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const context = await browser!.newContext({
+    context = await browser!.newContext({
       viewport: { width: 1280, height: 800 },
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     });
@@ -145,11 +147,6 @@ export async function GET(request: NextRequest) {
         return cells.map(c => c.textContent?.trim() || '');
       }).filter(r => r.length > 0);
     });
-
-    await context.close();
-    if (browser) {
-      await browser.close();
-    }
 
     // 6. Robust cell-content-based regex log extraction
     const parsedLogs: Array<{
@@ -267,5 +264,13 @@ export async function GET(request: NextRequest) {
   } catch (err: any) {
     console.error('Scraper API Exception:', err);
     return NextResponse.json({ error: `Portal scraper failed: ${err.message}` }, { status: 500 });
+  } finally {
+    if (context) {
+      await context.close().catch(() => {});
+    }
+    if (browser) {
+      await browser.close().catch(() => {});
+      console.log('Successfully closed and released Playwright Browser connection for scraper.');
+    }
   }
 }
