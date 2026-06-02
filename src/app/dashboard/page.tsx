@@ -31,10 +31,12 @@ const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
 // Elegant retro-futuristic dark terminal console to show live automation updates
 const TerminalConsole = ({ logs, onClose }: { logs: Array<{ status: string; message: string }>; onClose: () => void }) => {
-  const terminalEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
   }, [logs]);
 
   return (
@@ -69,7 +71,10 @@ const TerminalConsole = ({ logs, onClose }: { logs: Array<{ status: string; mess
         </button>
       </div>
 
-      <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', scrollbarWidth: 'thin' }}>
+      <div 
+        ref={containerRef}
+        style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', scrollbarWidth: 'thin' }}
+      >
         {logs.map((log, index) => {
           let styleColor = '#34d399'; // Default green
           if (log.status === 'error') styleColor = '#f87171'; // Red
@@ -84,7 +89,6 @@ const TerminalConsole = ({ logs, onClose }: { logs: Array<{ status: string; mess
             </div>
           );
         })}
-        <div ref={terminalEndRef} />
       </div>
     </div>
   );
