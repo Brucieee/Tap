@@ -136,7 +136,7 @@ export default function DashboardPage() {
     is_automation_enabled: true,
     wfh_reason: 'Work from home',
     role: 'user',
-    wfh_offsets: {} as Record<string, 'wfh' | 'office'>
+    wfh_offsets: {} as Record<string, any>
   });
 
   // Company Events State
@@ -168,30 +168,45 @@ export default function DashboardPage() {
   const [manualDate, setManualDate] = useState('');
   const [adminStats, setAdminStats] = useState({ todayLogins: 0, todayLogouts: 0, activeAutomatedUsers: 0 });
   
-  // Date-Specific Schedule Overrides / Offsets
-  const [overrideDate, setOverrideDate] = useState('');
-  const [overrideStatus, setOverrideStatus] = useState<'wfh' | 'office'>('wfh');
+  // Date-Specific Schedule Offsets / Day Swaps
+  const [offsetSourceDate, setOffsetSourceDate] = useState('');
+  const [offsetTargetDate, setOffsetTargetDate] = useState('');
 
-  const handleAddOverride = async () => {
-    if (!overrideDate) {
-      addToast('Error', 'Please select a date first.', 'sync', 'failed');
+  const handleAddOffsetSwap = async () => {
+    if (!offsetSourceDate || !offsetTargetDate) {
+      addToast('Error', 'Please select both swap dates.', 'sync', 'failed');
       return;
     }
+    if (offsetSourceDate === offsetTargetDate) {
+      addToast('Error', 'Swap dates must be different.', 'sync', 'failed');
+      return;
+    }
+
     const newOffsets = {
       ...(profile.wfh_offsets || {}),
-      [overrideDate]: overrideStatus
+      [offsetSourceDate]: { status: 'wfh', pairedWith: offsetTargetDate },
+      [offsetTargetDate]: { status: 'office', pairedWith: offsetSourceDate }
     };
+
     setProfile(prev => ({
       ...prev,
       wfh_offsets: newOffsets
     }));
-    setOverrideDate('');
+    setOffsetSourceDate('');
+    setOffsetTargetDate('');
     await saveWfhOffsets(newOffsets);
   };
 
-  const handleDeleteOverride = async (dateKey: string) => {
+  const handleDeleteOffsetSwap = async (dateKey: string) => {
     const newOffsets = { ...(profile.wfh_offsets || {}) };
+    const entry = newOffsets[dateKey];
+    
+    if (entry && typeof entry === 'object' && 'pairedWith' in entry) {
+      const counterpart = entry.pairedWith;
+      delete newOffsets[counterpart];
+    }
     delete newOffsets[dateKey];
+
     setProfile(prev => ({
       ...prev,
       wfh_offsets: newOffsets
@@ -199,7 +214,7 @@ export default function DashboardPage() {
     await saveWfhOffsets(newOffsets);
   };
 
-  const saveWfhOffsets = async (newOffsets: Record<string, 'wfh' | 'office'>) => {
+  const saveWfhOffsets = async (newOffsets: Record<string, any>) => {
     try {
       const response = await fetch('/api/profile', {
         method: 'POST',
@@ -218,10 +233,10 @@ export default function DashboardPage() {
         }),
       });
       if (response.ok) {
-        addToast('Success', 'Schedule overrides updated successfully!', 'sync', 'success');
+        addToast('Success', 'Schedule offsets updated successfully!', 'sync', 'success');
       } else {
         const errorData = await response.json();
-        addToast('Error', errorData.error || 'Failed to update overrides.', 'sync', 'failed');
+        addToast('Error', errorData.error || 'Failed to update offsets.', 'sync', 'failed');
       }
     } catch (error: any) {
       addToast('Error', error.message || 'Error occurred while saving.', 'sync', 'failed');
@@ -348,9 +363,13 @@ export default function DashboardPage() {
       const offsetOverride = offsets[dateKey];
       
       let isWfhDayForPastDate = false;
-      if (offsetOverride === 'wfh') {
+      const resolvedStatus = offsetOverride 
+        ? (typeof offsetOverride === 'object' ? offsetOverride.status : offsetOverride)
+        : null;
+
+      if (resolvedStatus === 'wfh') {
         isWfhDayForPastDate = true;
-      } else if (offsetOverride === 'office') {
+      } else if (resolvedStatus === 'office') {
         isWfhDayForPastDate = false;
       } else {
         const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -2633,162 +2652,256 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 4. Schedule Overrides / Offsets Card */}
+            {/* 4. Schedule Offsets & Swaps Card */}
             <div className="ui-card" style={{ maxWidth: '100%', padding: '2.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
-                <Calendar className="ui-input-icon" style={{ position: 'static', padding: 0, color: 'var(--brand-navy)', width: '20px', height: '20px' }} />
+                <Calendar style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
-                  Date-Specific Overrides
+                  Schedule Offsets & Day Swaps
                 </h3>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                <label className="glass-label">Add Temporary Swap/Override</label>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <input
-                    type="date"
-                    value={overrideDate}
-                    onChange={(e) => setOverrideDate(e.target.value)}
-                    style={{
-                      flex: 1,
-                      minWidth: '130px',
-                      padding: '0.55rem 0.95rem',
-                      fontSize: '0.8rem',
-                      borderRadius: '12px',
-                      border: '1px solid var(--input-border)',
-                      color: 'var(--brand-navy)',
-                      outline: 'none',
-                      background: '#ffffff'
-                    }}
-                  />
-                  <select
-                    value={overrideStatus}
-                    onChange={(e) => setOverrideStatus(e.target.value as 'wfh' | 'office')}
-                    style={{
-                      padding: '0.55rem 0.95rem',
-                      fontSize: '0.8rem',
-                      borderRadius: '12px',
-                      border: '1px solid var(--input-border)',
-                      color: 'var(--brand-navy)',
-                      outline: 'none',
-                      background: '#ffffff',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <option value="wfh">🏡 Force WFH</option>
-                    <option value="office">🏢 Force Office</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={handleAddOverride}
-                    className="btn-ui-primary"
-                    style={{
-                      padding: '0.55rem 1rem',
-                      fontSize: '0.8rem',
-                      borderRadius: '12px',
-                      width: 'auto',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    <Plus style={{ width: '14px', height: '14px' }} />
-                    Add
-                  </button>
-                </div>
-              </div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4', margin: 0 }}>
+                Swap an Office day (so it becomes WFH and logs attendance) with a WFH day (so it becomes Office and skips automated logs).
+              </p>
 
-              {/* List of active overrides */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
-                <label className="glass-label">Active Overrides</label>
-                {Object.keys(profile.wfh_offsets || {}).length === 0 ? (
-                  <div style={{
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div>
+                  <label className="glass-label">Office Date (Swap to WFH)</label>
+                  <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.4rem' }}>
+                    <Calendar className="ui-input-icon" />
+                    <input
+                      type="date"
+                      value={offsetSourceDate}
+                      onChange={(e) => setOffsetSourceDate(e.target.value)}
+                      className="ui-input"
+                      style={{ paddingLeft: '2.75rem' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="glass-label">WFH Date (Swap to Office)</label>
+                  <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.4rem' }}>
+                    <Calendar className="ui-input-icon" />
+                    <input
+                      type="date"
+                      value={offsetTargetDate}
+                      onChange={(e) => setOffsetTargetDate(e.target.value)}
+                      className="ui-input"
+                      style={{ paddingLeft: '2.75rem' }}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddOffsetSwap}
+                  className="btn-ui-primary"
+                  style={{
+                    padding: '0.75rem 1.25rem',
+                    fontSize: '0.85rem',
+                    borderRadius: '12px',
+                    width: '100%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    padding: '1.5rem',
-                    border: '1px dashed rgba(17, 51, 85, 0.1)',
-                    borderRadius: '16px',
-                    color: 'var(--text-muted)',
-                    fontSize: '0.8rem',
-                    textAlign: 'center'
-                  }}>
-                    No active date-specific overrides.
-                  </div>
-                ) : (
-                  <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem',
-                    maxHeight: '160px',
-                    overflowY: 'auto',
-                    paddingRight: '4px'
-                  }}>
-                    {Object.entries(profile.wfh_offsets || {}).map(([dateStr, status]) => {
-                      // Format date beautifully
-                      let formattedDate = dateStr;
-                      try {
-                        const d = new Date(dateStr);
-                        formattedDate = d.toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric'
-                        });
-                      } catch (e) {}
+                    gap: '6px',
+                    marginTop: '0.25rem',
+                    fontWeight: 600
+                  }}
+                >
+                  <Plus style={{ width: '16px', height: '16px' }} />
+                  Add Offset Swap
+                </button>
+              </div>
 
-                      return (
-                        <div
-                          key={dateStr}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '0.5rem 0.75rem',
-                            background: 'rgba(17, 51, 85, 0.02)',
-                            border: '1px solid rgba(17, 51, 85, 0.06)',
-                            borderRadius: '12px',
-                            gap: '0.5rem'
-                          }}
-                        >
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--brand-navy)' }}>
-                              {formattedDate}
-                            </span>
-                            <span style={{
-                              fontSize: '0.65rem',
-                              fontWeight: 700,
-                              textTransform: 'uppercase',
-                              color: status === 'wfh' ? '#16a34a' : 'var(--accent-blue)',
-                              marginTop: '2px'
-                            }}>
-                              {status === 'wfh' ? '🏡 WFH Override' : '🏢 Office Override'}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteOverride(dateStr)}
+              {/* List of active offset swaps */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
+                <label className="glass-label">Active Offset Swaps</label>
+                {(() => {
+                  const offsetsMap = profile.wfh_offsets || {};
+                  const renderedKeys = new Set<string>();
+                  const pairedSwaps: Array<{ officeDate: string; wfhDate: string }> = [];
+                  const singleOverrides: Array<{ date: string; status: 'wfh' | 'office' }> = [];
+
+                  Object.entries(offsetsMap).forEach(([dateStr, val]) => {
+                    if (renderedKeys.has(dateStr)) return;
+
+                    if (val && typeof val === 'object' && 'pairedWith' in val) {
+                      const counterpart = val.pairedWith;
+                      renderedKeys.add(dateStr);
+                      renderedKeys.add(counterpart);
+
+                      if (val.status === 'wfh') {
+                        pairedSwaps.push({ officeDate: dateStr, wfhDate: counterpart });
+                      } else {
+                        pairedSwaps.push({ officeDate: counterpart, wfhDate: dateStr });
+                      }
+                    } else {
+                      renderedKeys.add(dateStr);
+                      singleOverrides.push({ date: dateStr, status: val as 'wfh' | 'office' });
+                    }
+                  });
+
+                  const hasItems = pairedSwaps.length > 0 || singleOverrides.length > 0;
+
+                  if (!hasItems) {
+                    return (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '1.5rem',
+                        border: '1px dashed rgba(17, 51, 85, 0.1)',
+                        borderRadius: '16px',
+                        color: 'var(--text-muted)',
+                        fontSize: '0.8rem',
+                        textAlign: 'center'
+                      }}>
+                        No active schedule offsets.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.65rem',
+                      maxHeight: '220px',
+                      overflowY: 'auto',
+                      paddingRight: '4px'
+                    }}>
+                      {/* Paired Swaps */}
+                      {pairedSwaps.map((swap) => {
+                        let formattedOffice = swap.officeDate;
+                        let formattedWfh = swap.wfhDate;
+                        try {
+                          formattedOffice = new Date(swap.officeDate).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          });
+                          formattedWfh = new Date(swap.wfhDate).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          });
+                        } catch (e) {}
+
+                        return (
+                          <div
+                            key={swap.officeDate}
                             style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#ef4444',
-                              cursor: 'pointer',
-                              padding: '0.25rem',
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'center',
-                              opacity: 0.8,
-                              transition: 'opacity 0.2s'
+                              justifyContent: 'space-between',
+                              padding: '0.65rem 0.95rem',
+                              background: 'rgba(41, 116, 166, 0.04)',
+                              border: '1px solid rgba(41, 116, 166, 0.12)',
+                              borderRadius: '14px',
+                              gap: '0.5rem'
                             }}
-                            title="Remove override"
                           >
-                            <Trash2 style={{ width: '14px', height: '14px' }} />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#16a34a', textTransform: 'uppercase' }}>🏡 WFH Day</span>
+                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--brand-navy)' }}>{formattedOffice}</span>
+                              </div>
+                              <span style={{ color: 'var(--accent-blue)', fontWeight: 700, fontSize: '0.9rem' }}>⇄</span>
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--accent-blue)', textTransform: 'uppercase' }}>🏢 Office Day</span>
+                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--brand-navy)' }}>{formattedWfh}</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOffsetSwap(swap.officeDate)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                padding: '0.25rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'opacity 0.2s',
+                                opacity: 0.85
+                              }}
+                              title="Remove swap"
+                            >
+                              <Trash2 style={{ width: '14px', height: '14px' }} />
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      {/* Legacy / Single Overrides */}
+                      {singleOverrides.map((ov) => {
+                        let formattedDate = ov.date;
+                        try {
+                          formattedDate = new Date(ov.date).toLocaleDateString('en-US', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          });
+                        } catch (e) {}
+
+                        return (
+                          <div
+                            key={ov.date}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '0.5rem 0.75rem',
+                              background: 'rgba(17, 51, 85, 0.02)',
+                              border: '1px solid rgba(17, 51, 85, 0.06)',
+                              borderRadius: '12px',
+                              gap: '0.5rem'
+                            }}
+                          >
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--brand-navy)' }}>
+                                {formattedDate}
+                              </span>
+                              <span style={{
+                                fontSize: '0.65rem',
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                color: ov.status === 'wfh' ? '#16a34a' : 'var(--accent-blue)',
+                                marginTop: '2px'
+                              }}>
+                                {ov.status === 'wfh' ? '🏡 WFH Override' : '🏢 Office Override'}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOffsetSwap(ov.date)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                padding: '0.25rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                opacity: 0.8
+                              }}
+                              title="Remove override"
+                            >
+                              <Trash2 style={{ width: '14px', height: '14px' }} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>

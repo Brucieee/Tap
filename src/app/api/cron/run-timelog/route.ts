@@ -422,12 +422,16 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       
       let isWfhDay = false;
       let wfhReasonText = '';
-      if (offsetOverride === 'wfh') {
+      const resolvedStatus = offsetOverride 
+        ? (typeof offsetOverride === 'object' ? offsetOverride.status : offsetOverride)
+        : null;
+
+      if (resolvedStatus === 'wfh') {
         isWfhDay = true;
-        wfhReasonText = `Custom override forced WFH today (${currentDate})`;
-      } else if (offsetOverride === 'office') {
+        wfhReasonText = `Custom WFH offset override active for today (${currentDate})`;
+      } else if (resolvedStatus === 'office') {
         isWfhDay = false;
-        wfhReasonText = `Custom override forced Office/On-Site today (${currentDate})`;
+        wfhReasonText = `Custom Office/On-Site offset override active for today (${currentDate})`;
       } else {
         const wfhDays = profile.wfh_days || [];
         isWfhDay = wfhDays.some((day: string) => day.toLowerCase() === currentDay.toLowerCase());
