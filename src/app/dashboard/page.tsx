@@ -181,6 +181,8 @@ export default function DashboardPage() {
   const [portalLogs, setPortalLogs] = useState<any[]>([]);
   const [loadingPortalLogs, setLoadingPortalLogs] = useState(false);
   const [syncError, setSyncError] = useState('');
+  const [portalLogsViewMode, setPortalLogsViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [calendarMonthOffset, setCalendarMonthOffset] = useState<number>(0);
 
   const router = useRouter();
   const supabase = createClient();
@@ -1571,62 +1573,283 @@ export default function DashboardPage() {
                 <AlertCircle style={{ width: '16px', height: '16px', flexShrink: 0 }} />
                 <span>{syncError}</span>
               </div>
-            ) : portalLogs.length === 0 ? (
-              <div style={{ padding: '1rem', border: '1px dashed #e2e8f0', borderRadius: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                📅 No portal logs found yet. Click the "Sync Portal" button above to pull recent log history.
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Date</th>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Time</th>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Mode</th>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {portalLogs.map((log, index) => {
-                      const isTimeIn = log.mode.toLowerCase().includes('in');
-                      const isApproved = log.status.toLowerCase().includes('approved') || log.status.toLowerCase().includes('active');
-                      
-                      return (
-                        <tr key={index} style={{ borderBottom: index === portalLogs.length - 1 ? 'none' : '1px solid #f1f5f9', backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                          <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{log.date}</td>
-                          <td style={{ padding: '0.75rem 1rem', color: '#475569', fontWeight: 500 }}>{log.time}</td>
-                          <td style={{ padding: '0.75rem 1rem' }}>
-                            <span style={{
-                              fontSize: '0.7rem',
-                              fontWeight: 700,
-                              padding: '2px 8px',
-                              borderRadius: '999px',
-                              backgroundColor: isTimeIn ? '#ecfdf5' : '#eff6ff',
-                              color: isTimeIn ? '#059669' : '#2563eb',
-                              textTransform: 'uppercase'
+            ) : (() => {
+              // Group logs by date
+              const getLogDateKey = (logDateStr: string) => {
+                try {
+                  const [m, d, y] = logDateStr.split('/');
+                  const yearStr = y.length === 2 ? `20${y}` : y;
+                  const monthStr = m.padStart(2, '0');
+                  const dayStr = d.padStart(2, '0');
+                  return `${yearStr}-${monthStr}-${dayStr}`;
+                } catch {
+                  return '';
+                }
+              };
+
+              const logsByDate = portalLogs.reduce((acc: Record<string, any[]>, log) => {
+                const key = getLogDateKey(log.date);
+                if (key) {
+                  if (!acc[key]) acc[key] = [];
+                  acc[key].push(log);
+                }
+                return acc;
+              }, {});
+
+              // Resolve Calendar offsets
+              const baseDate = new Date();
+              baseDate.setMonth(baseDate.getMonth() + calendarMonthOffset);
+              const calendarYear = baseDate.getFullYear();
+              const calendarMonth = baseDate.getMonth();
+
+              const firstDayIndex = new Date(calendarYear, calendarMonth, 1).getDay(); // 0-6
+              const totalDays = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+              const prevMonthTotalDays = new Date(calendarYear, calendarMonth, 0).getDate();
+              const monthName = baseDate.toLocaleString('default', { month: 'long' });
+
+              const cells = [];
+              // Prev month padding
+              for (let i = firstDayIndex - 1; i >= 0; i--) {
+                cells.push({
+                  day: prevMonthTotalDays - i,
+                  isCurrentMonth: false,
+                  dateStr: ''
+                });
+              }
+              // Current month days
+              for (let i = 1; i <= totalDays; i++) {
+                const dayStr = i.toString().padStart(2, '0');
+                const monthStr = (calendarMonth + 1).toString().padStart(2, '0');
+                cells.push({
+                  day: i,
+                  isCurrentMonth: true,
+                  dateStr: `${calendarYear}-${monthStr}-${dayStr}`
+                });
+              }
+              // Next month padding to complete 42 cells grid
+              const remaining = 42 - cells.length;
+              for (let i = 1; i <= remaining; i++) {
+                cells.push({
+                  day: i,
+                  isCurrentMonth: false,
+                  dateStr: ''
+                });
+              }
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  {/* Calendar controls bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', backgroundColor: '#f8fafc', padding: '0.6rem 1.25rem', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => setCalendarMonthOffset(prev => prev - 1)}
+                        style={{ background: 'none', border: 'none', color: 'var(--brand-navy)', fontWeight: 800, fontSize: '1.1rem', cursor: 'pointer', padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        &larr;
+                      </button>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 750, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', minWidth: '130px', textAlign: 'center' }}>
+                        {monthName} {calendarYear}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setCalendarMonthOffset(prev => prev + 1)}
+                        style={{ background: 'none', border: 'none', color: 'var(--brand-navy)', fontWeight: 800, fontSize: '1.1rem', cursor: 'pointer', padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        &rarr;
+                      </button>
+                      {calendarMonthOffset !== 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setCalendarMonthOffset(0)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--accent-blue)',
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            marginLeft: '0.5rem',
+                            textDecoration: 'underline'
+                          }}
+                        >
+                          Today
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
+                      <button
+                        type="button"
+                        onClick={() => setPortalLogsViewMode('calendar')}
+                        style={{
+                          border: 'none',
+                          padding: '0.4rem 0.9rem',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          backgroundColor: portalLogsViewMode === 'calendar' ? 'var(--brand-navy)' : 'transparent',
+                          color: portalLogsViewMode === 'calendar' ? '#ffffff' : 'var(--text-muted)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        Calendar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPortalLogsViewMode('list')}
+                        style={{
+                          border: 'none',
+                          padding: '0.4rem 0.9rem',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          backgroundColor: portalLogsViewMode === 'list' ? 'var(--brand-navy)' : 'transparent',
+                          color: portalLogsViewMode === 'list' ? '#ffffff' : 'var(--text-muted)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        List Table
+                      </button>
+                    </div>
+                  </div>
+
+                  {portalLogsViewMode === 'calendar' ? (
+                    /* Calendar View Grid */
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {/* Week headers */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>
+                        {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => (
+                          <div key={d} style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--brand-navy)', letterSpacing: '0.05em' }}>
+                            {d}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Day cells grid */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
+                        {cells.map((cell, index) => {
+                          const dayLogs = cell.dateStr ? logsByDate[cell.dateStr] || [] : [];
+                          const todayStr = new Date().toLocaleDateString('en-CA'); // 'YYYY-MM-DD' format reliably
+                          const isToday = cell.dateStr === todayStr;
+                          const isWeekend = (index % 7 === 0 || index % 7 === 6);
+                          
+                          return (
+                            <div key={index} style={{
+                              minHeight: '75px',
+                              padding: '6px',
+                              borderRadius: '10px',
+                              border: '1px solid',
+                              borderColor: isToday ? 'var(--accent-blue)' : '#f1f5f9',
+                              backgroundColor: !cell.isCurrentMonth 
+                                ? 'rgba(241, 245, 249, 0.5)' 
+                                : isToday 
+                                  ? 'rgba(41, 116, 166, 0.05)' 
+                                  : isWeekend 
+                                    ? '#fafafa' 
+                                    : '#ffffff',
+                              opacity: !cell.isCurrentMonth ? 0.4 : 1,
+                              boxShadow: isToday ? '0 0 0 1px var(--accent-blue)' : 'none',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '4px',
+                              transition: 'transform 0.15s ease, box-shadow 0.15s ease'
                             }}>
-                              {log.mode}
-                            </span>
-                          </td>
-                          <td style={{ padding: '0.75rem 1rem' }}>
-                            <span style={{
-                              fontSize: '0.7rem',
-                              fontWeight: 700,
-                              padding: '2px 8px',
-                              borderRadius: '999px',
-                              backgroundColor: isApproved ? '#e0f2fe' : '#fef3c7',
-                              color: isApproved ? '#0369a1' : '#d97706'
-                            }}>
-                              {log.status}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                              <span style={{
+                                fontSize: '0.7rem',
+                                fontWeight: cell.isCurrentMonth ? 800 : 400,
+                                color: isToday ? 'var(--accent-blue)' : 'var(--brand-navy)',
+                                alignSelf: 'flex-start'
+                              }}>
+                                {cell.day}
+                              </span>
+                              
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexGrow: 1, justifyContent: 'flex-start' }}>
+                                {dayLogs.map((log: any, idx: number) => {
+                                  const isTimeIn = log.mode.toLowerCase().includes('in');
+                                  
+                                  return (
+                                    <div key={idx} style={{
+                                      fontSize: '0.58rem',
+                                      fontWeight: 800,
+                                      padding: '2px 4px',
+                                      borderRadius: '4px',
+                                      backgroundColor: isTimeIn ? '#ecfdf5' : '#eff6ff',
+                                      color: isTimeIn ? '#059669' : '#2563eb',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      gap: '2px',
+                                      border: '1px solid',
+                                      borderColor: isTimeIn ? 'rgba(5, 150, 105, 0.15)' : 'rgba(37, 99, 235, 0.15)'
+                                    }}>
+                                      <span>{isTimeIn ? 'In' : 'Out'}</span>
+                                      <span>{log.time}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Traditional List Table View */
+                    <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                            <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Date</th>
+                            <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Time</th>
+                            <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Mode</th>
+                            <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {portalLogs.map((log, index) => {
+                            const isTimeIn = log.mode.toLowerCase().includes('in');
+                            const isApproved = log.status.toLowerCase().includes('approved') || log.status.toLowerCase().includes('active');
+                            
+                            return (
+                              <tr key={index} style={{ borderBottom: index === portalLogs.length - 1 ? 'none' : '1px solid #f1f5f9', backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa' }}>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{log.date}</td>
+                                <td style={{ padding: '0.75rem 1rem', color: '#475569', fontWeight: 500 }}>{log.time}</td>
+                                <td style={{ padding: '0.75rem 1rem' }}>
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    backgroundColor: isTimeIn ? '#ecfdf5' : '#eff6ff',
+                                    color: isTimeIn ? '#059669' : '#2563eb',
+                                    textTransform: 'uppercase'
+                                  }}>
+                                    {log.mode}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '0.75rem 1rem' }}>
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    backgroundColor: isApproved ? '#e0f2fe' : '#fef3c7',
+                                    color: isApproved ? '#0369a1' : '#d97706'
+                                  }}>
+                                    {log.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
 
