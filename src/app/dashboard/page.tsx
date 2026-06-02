@@ -1616,6 +1616,29 @@ export default function DashboardPage() {
                 }
               };
 
+              const formatCleanTime = (timeStr: string) => {
+                try {
+                  const trimmed = timeStr.trim();
+                  // If date is prepended, isolate time part
+                  const timeOnly = trimmed.includes('/') 
+                    ? trimmed.split(/\s+/).slice(1).join(' ') 
+                    : trimmed;
+                  
+                  // Match HH:MM:SS with or without AM/PM
+                  const timeRegex = /^(\d{1,2}):(\d{2}):(\d{2})(?:\s*([AP]M))?$/i;
+                  const match = timeOnly.match(timeRegex);
+                  if (match) {
+                    const [_, h, m, s, ampm] = match;
+                    return `${parseInt(h, 10)}:${m}${ampm ? ' ' + ampm.toUpperCase() : ''}`;
+                  }
+                  
+                  // Fallback: drop seconds only
+                  return timeOnly.replace(/:(\d{2})\b(?=\s*[AP]M|$)/i, '');
+                } catch {
+                  return timeStr;
+                }
+              };
+
               const logsByDate = portalLogs.reduce((acc: Record<string, any[]>, log) => {
                 const key = getLogDateKey(log.date);
                 if (key) {
@@ -1793,34 +1816,41 @@ export default function DashboardPage() {
                                 {cell.day}
                               </span>
                               
-                              <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '3px', flexGrow: 1, justifyContent: 'flex-start', alignItems: 'flex-start' }}>
-                                {dayLogs.map((log: any, idx: number) => {
-                                  const isTimeIn = log.mode.toLowerCase().includes('in');
-                                  
-                                  return (
-                                    <div key={idx} style={{
-                                      fontSize: '0.55rem',
-                                      fontWeight: 800,
-                                      padding: '1.5px 5px',
-                                      borderRadius: '999px',
-                                      backgroundColor: isTimeIn ? '#e2fbe8' : '#fde2e2',
-                                      color: isTimeIn ? '#15803d' : '#b91c1c',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '2px',
-                                      border: '1px solid',
-                                      borderColor: isTimeIn ? 'rgba(21, 128, 61, 0.2)' : 'rgba(185, 28, 28, 0.2)',
-                                      whiteSpace: 'nowrap'
-                                    }}>
-                                      <span>{isTimeIn ? 'In' : 'Out'}:</span>
-                                      <span>
-                                        {log.time.includes('/') 
-                                          ? log.time.split(/\s+/).slice(1).join(' ').replace(/:00\b/g, '')
-                                          : log.time.replace(/:00\b/g, '')}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexGrow: 1, justifyContent: 'flex-start' }}>
+                                {(() => {
+                                  const sortedDayLogs = [...dayLogs].sort((a, b) => {
+                                    const aIsIn = a.mode.toLowerCase().includes('in');
+                                    const bIsIn = b.mode.toLowerCase().includes('in');
+                                    if (aIsIn && !bIsIn) return -1;
+                                    if (!aIsIn && bIsIn) return 1;
+                                    return 0;
+                                  });
+
+                                  return sortedDayLogs.map((log: any, idx: number) => {
+                                    const isTimeIn = log.mode.toLowerCase().includes('in');
+                                    
+                                    return (
+                                      <div key={idx} style={{
+                                        fontSize: '0.55rem',
+                                        fontWeight: 800,
+                                        padding: '1.5px 5px',
+                                        borderRadius: '999px',
+                                        backgroundColor: isTimeIn ? '#e2fbe8' : '#fde2e2',
+                                        color: isTimeIn ? '#15803d' : '#b91c1c',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: '2px',
+                                        border: '1px solid',
+                                        borderColor: isTimeIn ? 'rgba(21, 128, 61, 0.2)' : 'rgba(185, 28, 28, 0.2)',
+                                        whiteSpace: 'nowrap'
+                                      }}>
+                                        <span>{isTimeIn ? 'In' : 'Out'}:</span>
+                                        <span>{formatCleanTime(log.time)}</span>
+                                      </div>
+                                    );
+                                  });
+                                })()}
                               </div>
                             </div>
                           );
@@ -1828,15 +1858,15 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   ) : (
-                    /* Traditional List Table View */
+                    /* Traditional List Table View with equal spacing */
                     <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                      <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
                         <thead>
                           <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                            <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Date</th>
-                            <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Time</th>
-                            <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Mode</th>
-                            <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Status</th>
+                            <th style={{ width: '25%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Date</th>
+                            <th style={{ width: '25%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Time</th>
+                            <th style={{ width: '25%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Mode</th>
+                            <th style={{ width: '25%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Status</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1846,15 +1876,13 @@ export default function DashboardPage() {
                             
                             return (
                               <tr key={index} style={{ borderBottom: index === portalLogs.length - 1 ? 'none' : '1px solid #f1f5f9', backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                <td style={{ width: '25%', padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                                   {log.date.includes(' ') ? log.date.split(/\s+/)[0] : log.date}
                                 </td>
-                                <td style={{ padding: '0.75rem 1rem', color: '#475569', fontWeight: 500 }}>
-                                  {log.time.includes('/') 
-                                    ? log.time.split(/\s+/).slice(1).join(' ').replace(/:00\b/g, '')
-                                    : log.time.replace(/:00\b/g, '')}
+                                <td style={{ width: '25%', padding: '0.75rem 1rem', color: '#475569', fontWeight: 500 }}>
+                                  {formatCleanTime(log.time)}
                                 </td>
-                                <td style={{ padding: '0.75rem 1rem' }}>
+                                <td style={{ width: '25%', padding: '0.75rem 1rem' }}>
                                   <span style={{
                                     fontSize: '0.7rem',
                                     fontWeight: 700,
@@ -1867,7 +1895,7 @@ export default function DashboardPage() {
                                     {log.mode}
                                   </span>
                                 </td>
-                                <td style={{ padding: '0.75rem 1rem' }}>
+                                <td style={{ width: '25%', padding: '0.75rem 1rem' }}>
                                   <span style={{
                                     fontSize: '0.7rem',
                                     fontWeight: 700,
