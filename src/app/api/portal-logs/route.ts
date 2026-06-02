@@ -181,9 +181,27 @@ export async function GET(request: NextRequest) {
         statusVal = statusCell;
       }
 
+      // Isolate date and time parts if they contain concatenated timestamps
+      let cleanDate = dateVal.trim();
+      let cleanTime = timeVal.trim();
+
+      if (cleanDate.includes(' ')) {
+        cleanDate = cleanDate.split(/\s+/)[0];
+      }
+
+      if (cleanTime.includes('/')) {
+        const parts = cleanTime.split(/\s+/);
+        if (parts.length > 1) {
+          cleanTime = parts.slice(1).join(' ');
+        }
+      }
+
+      // Remove seconds for a cleaner look
+      cleanTime = cleanTime.replace(/:00\b/g, '');
+
       parsedLogs.push({
-        date: dateVal,
-        time: timeVal,
+        date: cleanDate,
+        time: cleanTime,
         mode: modeVal,
         status: statusVal,
         raw: row
@@ -191,6 +209,21 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(`Scraped and parsed ${parsedLogs.length} timelog records from portal.`);
+    
+    // Diagnostic log capture to inspect exact Cocogen date values
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const scratchDir = 'C:\\Users\\Bruce Wayne Lim\\.gemini\\antigravity\\brain\\31b9f260-52e5-4f5d-89a0-31494b201582\\scratch';
+      if (!fs.existsSync(scratchDir)) {
+        fs.mkdirSync(scratchDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(scratchDir, 'scraped_logs.json'), JSON.stringify(parsedLogs, null, 2));
+      console.log('Successfully saved scraped logs to diagnostic file.');
+    } catch (fsErr) {
+      console.error('Failed to save diagnostic logs:', fsErr);
+    }
+
     return NextResponse.json({
       success: true,
       logs: parsedLogs

@@ -1595,11 +1595,14 @@ export default function DashboardPage() {
                 <span>{syncError}</span>
               </div>
             ) : (() => {
-              // Group logs by date with robust whitespace trimming
+              // Group logs by date with robust whitespace trimming and time isolation
               const getLogDateKey = (logDateStr: string) => {
                 try {
                   const cleaned = logDateStr.trim();
-                  const [m, d, y] = cleaned.split('/');
+                  // Isolate date part if there is an appended time portion
+                  const datePart = cleaned.includes(' ') ? cleaned.split(/\s+/)[0] : cleaned;
+                  
+                  const [m, d, y] = datePart.split('/');
                   const cleanY = y.trim();
                   const cleanM = m.trim();
                   const cleanD = d.trim();
@@ -1810,7 +1813,11 @@ export default function DashboardPage() {
                                       whiteSpace: 'nowrap'
                                     }}>
                                       <span>{isTimeIn ? 'In' : 'Out'}:</span>
-                                      <span>{log.time}</span>
+                                      <span>
+                                        {log.time.includes('/') 
+                                          ? log.time.split(/\s+/).slice(1).join(' ').replace(/:00\b/g, '')
+                                          : log.time.replace(/:00\b/g, '')}
+                                      </span>
                                     </div>
                                   );
                                 })}
@@ -1839,8 +1846,14 @@ export default function DashboardPage() {
                             
                             return (
                               <tr key={index} style={{ borderBottom: index === portalLogs.length - 1 ? 'none' : '1px solid #f1f5f9', backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{log.date}</td>
-                                <td style={{ padding: '0.75rem 1rem', color: '#475569', fontWeight: 500 }}>{log.time}</td>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  {log.date.includes(' ') ? log.date.split(/\s+/)[0] : log.date}
+                                </td>
+                                <td style={{ padding: '0.75rem 1rem', color: '#475569', fontWeight: 500 }}>
+                                  {log.time.includes('/') 
+                                    ? log.time.split(/\s+/).slice(1).join(' ').replace(/:00\b/g, '')
+                                    : log.time.replace(/:00\b/g, '')}
+                                </td>
                                 <td style={{ padding: '0.75rem 1rem' }}>
                                   <span style={{
                                     fontSize: '0.7rem',
