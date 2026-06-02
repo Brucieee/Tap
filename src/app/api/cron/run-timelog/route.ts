@@ -476,16 +476,25 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       const matchedEvent = companyEvents.find((e: any) => e.date === currentDate);
       const isExcludedFromEvent = matchedEvent && matchedEvent.excluded_users && matchedEvent.excluded_users.includes(userId);
       
+      if (matchedEvent && isExcludedFromEvent) {
+        const msg = `Skipped: User is excluded from Company Event "${matchedEvent.title}" on date ${currentDate}.`;
+        console.log(`[Company Event Exclusion] User ${userId}: ${msg}`);
+        results.push({
+          userId,
+          employeeId: decryptedEmployeeId,
+          status: 'skipped',
+          message: msg
+        });
+        continue;
+      }
+
       let timeToInject;
-      if (matchedEvent && !isExcludedFromEvent) {
+      if (matchedEvent) {
         timeToInject = modeParam === 'login'
           ? (matchedEvent.login_time || '08:00:00')
           : (matchedEvent.logout_time || '12:00:00');
         console.log(`[Company Event Override] User ${userId}: Found company event "${matchedEvent.title}" for date ${currentDate}. Overriding hours for ${modeText} mode to ${timeToInject}`);
       } else {
-        if (matchedEvent && isExcludedFromEvent) {
-          console.log(`[Company Event Exclusion] User ${userId}: Excluded from event "${matchedEvent.title}" for date ${currentDate}. Keeping standard hours.`);
-        }
         timeToInject = modeParam === 'login' 
           ? (profile.login_time || '08:00:00') 
           : (profile.logout_time || '17:00:00');

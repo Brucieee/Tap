@@ -250,6 +250,14 @@ export default function DashboardPage() {
       const dayStr = pastDate.getDate().toString().padStart(2, '0');
       const dateKey = `${yearStr}-${monthStr}-${dayStr}`;
 
+      // Check if there is a company event on this past date and if the user is excluded from it
+      const matchedEvent = companyEvents.find(e => e.date === dateKey);
+      const isCurrentUserExcluded = matchedEvent && matchedEvent.excluded_users && matchedEvent.excluded_users.includes(profile.id);
+      if (matchedEvent && isCurrentUserExcluded) {
+        console.log(`[Auto-Recovery] Skipping missed date recovery for ${dateKey} because user is excluded from company event: ${matchedEvent.title}`);
+        continue;
+      }
+
       const dayEntries = logsMap[dateKey] || [];
       const hasTimeIn = dayEntries.some(log => log.mode.toLowerCase().includes('in'));
       const hasTimeOut = dayEntries.some(log => log.mode.toLowerCase().includes('out'));
