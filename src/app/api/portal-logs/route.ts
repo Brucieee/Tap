@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { chromium } = playwright;
-    let browser;
+    let browser: any = null;
 
     if (remoteUrl) {
       let formattedUrl = remoteUrl;
@@ -65,20 +65,39 @@ export async function GET(request: NextRequest) {
       }
 
       console.log('Connecting to remote Playwright service for scraper...');
-      try {
-        if (formattedUrl.includes('/playwright')) {
-          browser = await chromium.connect({ 
-            wsEndpoint: formattedUrl,
-            timeout: 15000
-          });
-        } else {
-          browser = await chromium.connectOverCDP(formattedUrl, {
-            timeout: 15000
-          });
+      const maxConnRetries = 3;
+      let connAttempt = 0;
+      let connSuccess = false;
+      
+      while (connAttempt < maxConnRetries && !connSuccess) {
+        connAttempt++;
+        try {
+          if (connAttempt > 1) {
+            const backoffMs = connAttempt === 2 ? 3000 : 8000;
+            console.log(`[Scraper Browser Connection Retry ${connAttempt}/${maxConnRetries}] Sleeping for ${backoffMs}ms before retrying remote browser connection...`);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+          }
+
+          if (formattedUrl.includes('/playwright')) {
+            console.log(`Connecting via Playwright native chromium.connect (Attempt ${connAttempt})...`);
+            browser = await chromium.connect({ 
+              wsEndpoint: formattedUrl,
+              timeout: 20000
+            });
+          } else {
+            console.log(`Connecting via CDP chromium.connectOverCDP (Attempt ${connAttempt})...`);
+            browser = await chromium.connectOverCDP(formattedUrl, {
+              timeout: 20000
+            });
+          }
+          connSuccess = true;
+          console.log('Successfully established connection to Playwright Remote Browser for scraper!');
+        } catch (connErr: any) {
+          console.error(`[Scraper Browser Connection Attempt ${connAttempt} Failed]:`, connErr.message);
+          if (connAttempt >= maxConnRetries) {
+            return NextResponse.json({ error: `Browser service unreachable after ${maxConnRetries} attempts: ${connErr.message}` }, { status: 502 });
+          }
         }
-      } catch (connErr: any) {
-        console.error('Browser connection failed:', connErr);
-        return NextResponse.json({ error: `Browser service unreachable: ${connErr.message}` }, { status: 502 });
       }
     } else {
       console.log('Launching local Chromium browser for scraper...');
@@ -88,7 +107,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const context = await browser.newContext({
+    const context = await browser!.newContext({
       viewport: { width: 1280, height: 800 },
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     });
@@ -128,7 +147,9 @@ export async function GET(request: NextRequest) {
     });
 
     await context.close();
-    await browser.close();
+    if (browser) {
+      await browser.close();
+    }
 
     // 6. Robust cell-content-based regex log extraction
     const parsedLogs: Array<{
@@ -145,14 +166,14 @@ export async function GET(request: NextRequest) {
       if (row.length < 3) continue;
 
       // Find if any cell matches a date pattern: MM/DD/YYYY, M/D/YYYY, MM/DD/YY, M/D/YY
-      const dateCellIndex = row.findIndex(cell => /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(cell));
+      const dateCellIndex = row.findIndex((cell: string) => /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(cell));
       if (dateCellIndex === -1) continue; // Skip header, buttons, or unrelated rows
 
       const dateVal = row[dateCellIndex];
 
       // Find the cell representing mode/type (I for In, O for Out, or full strings)
       let modeVal = 'Unknown';
-      const inOutCell = row.find(cell => {
+      const inOutCell = row.find((cell: string) => {
         const c = cell.trim().toUpperCase();
         return c === 'I' || c === 'O' || /\b(in|out|login|logout|time-in|time-out|correction)\b/i.test(c);
       });
@@ -169,14 +190,14 @@ export async function GET(request: NextRequest) {
 
       // Find a time-like cell (e.g. 08:00 AM, 17:00, 5:00 PM, 08:00:00)
       let timeVal = 'N/A';
-      const timeCell = row.find(cell => /\b\d{1,2}:\d{2}(:\d{2})?(\s?[AP]M)?\b/i.test(cell));
+      const timeCell = row.find((cell: string) => /\b\d{1,2}:\d{2}(:\d{2})?(\s?[AP]M)?\b/i.test(cell));
       if (timeCell) {
         timeVal = timeCell;
       }
 
       // Status cell (Approved, Pending, Submitted, etc.)
       let statusVal = 'Submitted';
-      const statusCell = row.find(cell => /\b(approved|pending|cancel|rejected|submitted|active)\b/i.test(cell));
+      const statusCell = row.find((cell: string) => /\b(approved|pending|cancel|rejected|submitted|active)\b/i.test(cell));
       if (statusCell) {
         statusVal = statusCell;
       }

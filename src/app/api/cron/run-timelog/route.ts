@@ -291,7 +291,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
     }
 
     const { chromium } = playwright;
-    let browser;
+    let browser: any = null;
     if (remoteUrl) {
       let formattedUrl = remoteUrl;
       // Auto-format Browserless.io URL if user provided root path
@@ -307,23 +307,39 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       }
 
       console.log(`Connecting to remote Playwright browser service...`);
-      try {
-        if (formattedUrl.includes('/playwright')) {
-          console.log('Connecting via Playwright native chromium.connect...');
-          browser = await chromium.connect({ 
-            wsEndpoint: formattedUrl,
-            timeout: 15000
-          });
-        } else {
-          console.log('Connecting via CDP chromium.connectOverCDP...');
-          browser = await chromium.connectOverCDP(formattedUrl, {
-            timeout: 15000
-          });
+      const maxConnRetries = 3;
+      let connAttempt = 0;
+      let connSuccess = false;
+      
+      while (connAttempt < maxConnRetries && !connSuccess) {
+        connAttempt++;
+        try {
+          if (connAttempt > 1) {
+            const backoffMs = connAttempt === 2 ? 3000 : 8000;
+            console.log(`[Browser Connection Retry ${connAttempt}/${maxConnRetries}] Sleeping for ${backoffMs}ms before retrying remote browser connection...`);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+          }
+
+          if (formattedUrl.includes('/playwright')) {
+            console.log(`Connecting via Playwright native chromium.connect (Attempt ${connAttempt})...`);
+            browser = await chromium.connect({ 
+              wsEndpoint: formattedUrl,
+              timeout: 20000
+            });
+          } else {
+            console.log(`Connecting via CDP chromium.connectOverCDP (Attempt ${connAttempt})...`);
+            browser = await chromium.connectOverCDP(formattedUrl, {
+              timeout: 20000
+            });
+          }
+          connSuccess = true;
+          console.log('Successfully established connection to Playwright Remote Browser!');
+        } catch (connErr: any) {
+          console.error(`[Browser Connection Attempt ${connAttempt} Failed]:`, connErr.message);
+          if (connAttempt >= maxConnRetries) {
+            throw new Error(`Failed to connect to remote Playwright service after ${maxConnRetries} attempts. Last error: ${connErr.message}`);
+          }
         }
-        console.log('Successfully established connection to Playwright Remote Browser!');
-      } catch (connErr: any) {
-        console.error(`Browser connection failed:`, connErr);
-        throw new Error(`Failed to connect to remote Playwright service: ${connErr.message}`);
       }
     } else {
       console.log('Launching local Chromium browser...');
@@ -552,7 +568,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
             console.log(`Processing timelog for Employee ID: ${decryptedEmployeeId}...`);
           }
 
-          context = await browser.newContext({
+          context = await browser!.newContext({
             viewport: { width: 1280, height: 800 },
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
           });
@@ -725,7 +741,9 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
     }
 
     // Close the browser when done
-    await browser.close();
+    if (browser) {
+      await browser.close();
+    }
 
     // 4. Final summary and response
     const successCount = results.filter(r => r.status === 'success').length;
