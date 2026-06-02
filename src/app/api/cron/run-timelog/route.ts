@@ -2,13 +2,48 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createStandlyAdminClient } from '@/utils/supabase/admin';
 import { createClient } from '@/utils/supabase/server';
 import { decrypt } from '@/utils/encryption';
+import { AsyncLocalStorage } from 'async_hooks';
 
 // Force dynamic execution for API routes that fetch fresh database records
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Extend serverless execution duration up to 60 seconds (Hobby plan supports up to 300s!)
 
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
+const logStorage = new AsyncLocalStorage<{
+  log: (msg: string, status: 'info' | 'success' | 'warn' | 'error') => void;
+}>();
+
+// Override console globally to pipe execution logs into request storage when active
+if (typeof global !== 'undefined') {
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+
+  console.log = (...args: any[]) => {
+    const store = logStorage.getStore();
+    if (store) {
+      store.log(args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '), 'info');
+    }
+    originalLog(...args);
+  };
+
+  console.error = (...args: any[]) => {
+    const store = logStorage.getStore();
+    if (store) {
+      store.log(args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '), 'error');
+    }
+    originalError(...args);
+  };
+
+  console.warn = (...args: any[]) => {
+    const store = logStorage.getStore();
+    if (store) {
+      store.log(args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '), 'warn');
+    }
+    originalWarn(...args);
+  };
+}
+
+async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParams) {
   
   // Security check: Verify a cron secret token to prevent unauthorized triggers
   const authHeader = request.headers.get('authorization');
@@ -183,12 +218,26 @@ export async function GET(request: NextRequest) {
     let dbError;
 
     if (isUserSession) {
-      // Manual/Sandbox run: Fetch only this user's profile
+      // Manual/Sandbox run: Fetch only the targeted profile
+      const targetUserId = searchParams.get('userId');
       const { data: { user } } = await supabase.auth.getUser();
+      
+      let fetchId = user?.id;
+      
+      if (targetUserId) {
+        // Verify admin
+        const { data: adminProfile } = await supabase.from('user_profiles').select('role').eq('id', user?.id).single();
+        if (adminProfile?.role === 'admin') {
+          fetchId = targetUserId;
+        } else {
+          return NextResponse.json({ error: 'Forbidden. Admin privileges required to trigger for another user.' }, { status: 403 });
+        }
+      }
+
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('id', user?.id);
+        .eq('id', fetchId);
       profiles = data;
       dbError = error;
     } else {
@@ -680,4 +729,56 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const isStream = searchParams.get('stream') === 'true';
+
+  if (isStream) {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const storeLog = (msg: string, status: 'info' | 'success' | 'warn' | 'error') => {
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status, message: msg })}\n\n`));
+          } catch (e) {
+            // Stream closed
+          }
+        };
+
+        await logStorage.run({ log: storeLog }, async () => {
+          try {
+            const flowResponse = await runTimelogFlow(request, searchParams);
+            let flowData = {};
+            
+            // Extract JSON object safely from the Response returned by runTimelogFlow
+            if (flowResponse instanceof Response) {
+              flowData = await flowResponse.json();
+            } else if (flowResponse && typeof (flowResponse as any).json === 'function') {
+              flowData = await (flowResponse as any).json();
+            } else {
+              flowData = flowResponse;
+            }
+            
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: 'final', data: flowData })}\n\n`));
+          } catch (err: any) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: 'error', message: `Fatal process error: ${err.message}` })}\n\n`));
+          } finally {
+            controller.close();
+          }
+        });
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      }
+    });
+  }
+
+  return runTimelogFlow(request, searchParams);
 }

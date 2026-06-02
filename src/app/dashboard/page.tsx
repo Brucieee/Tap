@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 import { 
@@ -28,6 +28,67 @@ import Logo from '@/components/Logo';
 import BatEffect from '@/components/effects/BatEffect';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+// Elegant retro-futuristic dark terminal console to show live automation updates
+const TerminalConsole = ({ logs, onClose }: { logs: Array<{ status: string; message: string }>; onClose: () => void }) => {
+  const terminalEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
+  return (
+    <div style={{
+      background: '#040b14',
+      border: '1px solid #1e293b',
+      borderRadius: '16px',
+      fontFamily: 'Consolas, Monaco, monospace',
+      fontSize: '0.8rem',
+      color: '#34d399',
+      padding: '1.25rem',
+      marginTop: '1.25rem',
+      position: 'relative',
+      boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.6)',
+      width: '100%',
+      animation: 'fadeIn 0.3s ease-out'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.6rem', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }}></div>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b' }}></div>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></div>
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem', marginLeft: '6px', letterSpacing: '0.05em' }}>playwright-agent@tap: ~</span>
+        </div>
+        <button 
+          onClick={onClose} 
+          style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '0.85rem', padding: '0 4px', transition: 'color 0.2s' }}
+          onMouseEnter={e => e.currentTarget.style.color = '#ffffff'}
+          onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
+        >
+          ✕
+        </button>
+      </div>
+
+      <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', scrollbarWidth: 'thin' }}>
+        {logs.map((log, index) => {
+          let styleColor = '#34d399'; // Default green
+          if (log.status === 'error') styleColor = '#f87171'; // Red
+          if (log.status === 'warn') styleColor = '#fbbf24'; // Orange
+          if (log.status === 'success') styleColor = '#10b981'; // Vivid Green
+          if (log.status === 'info') styleColor = '#60a5fa'; // Blue
+          
+          return (
+            <div key={index} style={{ color: styleColor, whiteSpace: 'pre-wrap', lineHeight: '1.5', display: 'flex', gap: '6px' }}>
+              <span style={{ color: 'rgba(255,255,255,0.15)', userSelect: 'none' }}>$</span>
+              <span>{log.message}</span>
+            </div>
+          );
+        })}
+        <div ref={terminalEndRef} />
+      </div>
+    </div>
+  );
+};
 
 export default function DashboardPage() {
   const [profile, setProfile] = useState({
@@ -62,13 +123,18 @@ export default function DashboardPage() {
   const [userEmail, setUserEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' as 'success' | 'error' | '' });
-  const [testLogs, setTestLogs] = useState<string[]>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [hasPasswordStored, setHasPasswordStored] = useState(false);
   const [isLocked, setIsLocked] = useState(true);
   const [triggerBatEffect, setTriggerBatEffect] = useState(false);
+  const [triggeringManualLog, setTriggeringManualLog] = useState<'login' | 'logout' | null>(null);
+  const [adminStats, setAdminStats] = useState({ todayLogins: 0, todayLogouts: 0, activeAutomatedUsers: 0 });
+  
+  // Real-time Virtual Terminal Logging
+  const [activeConsoleLogs, setActiveConsoleLogs] = useState<Array<{ status: string; message: string }>>([]);
+  const [showConsole, setShowConsole] = useState(false);
+  const [consoleTriggerSource, setConsoleTriggerSource] = useState<'user' | null>(null);
 
   // Standly Integration State
   const [leaves, setLeaves] = useState<any[]>([]);
@@ -163,6 +229,17 @@ export default function DashboardPage() {
           console.error('Failed to load registered profiles:', error);
         } finally {
           setLoadingEmployees(false);
+        }
+        
+        // Fetch Admin Statistics
+        try {
+          const statsRes = await fetch('/api/admin/stats');
+          if (statsRes.ok) {
+            const statsData = await statsRes.json();
+            setAdminStats(statsData);
+          }
+        } catch (statsErr) {
+          console.error('Failed to load admin stats:', statsErr);
         }
       }
     };
@@ -374,6 +451,93 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
     }
   };
 
+  const handleManualTrigger = async (mode: 'login' | 'logout', targetUserId?: string, overrideDate?: string) => {
+    setTriggeringManualLog(mode);
+    setMessage({ text: '', type: '' });
+    
+    // Set triggering source and start terminal
+    const source = targetUserId ? 'admin' : 'user';
+    setConsoleTriggerSource(source);
+    
+    const displayDate = overrideDate || new Date().toLocaleDateString();
+    setActiveConsoleLogs([{ 
+      status: 'info', 
+      message: `Initializing manual ${mode} override sequence ${targetUserId ? `for target user` : ''} on date: ${displayDate}...` 
+    }]);
+    setShowConsole(true);
+    
+    try {
+      let url = `/api/cron/run-timelog?mode=${mode}&test=true&stream=true`;
+      if (targetUserId) {
+        url += `&userId=${targetUserId}`;
+      }
+      if (overrideDate) {
+        url += `&date=${overrideDate}`;
+      }
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP network error! Status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Response stream reader is not supported by your browser.');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Parse event stream packets separated by double-newlines
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Hold partial line in buffer
+
+        for (const line of lines) {
+          const cleanLine = line.trim();
+          if (cleanLine.startsWith('data: ')) {
+            try {
+              const rawData = cleanLine.substring(6);
+              const logData = JSON.parse(rawData);
+              
+              if (logData.status === 'final') {
+                const finalData = logData.data;
+                const myResult = finalData.results && finalData.results.length > 0 ? finalData.results[0] : null;
+                
+                if (myResult && myResult.status === 'success') {
+                  setMessage({ text: `Successfully triggered ${mode === 'login' ? 'Log In' : 'Log Out'}!`, type: 'success' });
+                  setActiveConsoleLogs(prev => [...prev, { status: 'success', message: `Manual trigger finished successfully. Mode: ${modeText}` }]);
+                } else if (myResult && myResult.status === 'skipped') {
+                  setMessage({ text: myResult.message || `Skipped manual ${mode}.`, type: 'success' });
+                  setActiveConsoleLogs(prev => [...prev, { status: 'warn', message: myResult.message || `Manual run skipped.` }]);
+                } else {
+                  const errorMsg = myResult?.message || finalData.error || 'Unknown error';
+                  setMessage({ text: `Failed to trigger ${mode}: ${errorMsg}`, type: 'error' });
+                  setActiveConsoleLogs(prev => [...prev, { status: 'error', message: `Execution failed: ${errorMsg}` }]);
+                }
+              } else {
+                setActiveConsoleLogs(prev => [...prev, { status: logData.status, message: logData.message }]);
+              }
+            } catch (jsonErr) {
+              console.error('Failed to parse SSE line:', cleanLine, jsonErr);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      setMessage({ text: `Execution error: ${err.message}`, type: 'error' });
+      setActiveConsoleLogs(prev => [...prev, { status: 'error', message: `Fatal execution error: ${err.message}` }]);
+    } finally {
+      setTriggeringManualLog(null);
+      setTimeout(() => { setMessage({ text: '', type: '' }); }, 12000);
+    }
+  };
+
   const triggerBats = (e: React.MouseEvent) => {
     e.preventDefault();
     setTriggerBatEffect(true);
@@ -415,7 +579,7 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
       {/* Main Grid Content */}
       <main style={{
         flex: 1,
-        padding: '2.5rem 2rem',
+        padding: '0.5rem 2rem 2.5rem 2rem',
         maxWidth: '1280px',
         width: '100%',
         margin: '0 auto',
@@ -596,50 +760,152 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
             maxWidth: '100%',
             padding: '1.25rem 1.5rem',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+            flexDirection: 'column',
             gap: '1rem',
           }}>
-            <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>
-                Automation Control
-              </h3>
-            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>
+                  Automation Control
+                </h3>
+              </div>
 
-            {/* Toggle Switch */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ 
-                fontSize: '0.85rem', 
-                fontWeight: 600, 
-                color: profile.is_automation_enabled ? 'var(--accent-blue)' : 'var(--text-muted)' 
-              }}>
-                {profile.is_automation_enabled ? 'Active' : 'Paused'}
-              </span>
-              <label className="switch-container">
-                <input
-                  id="automation-toggle-input"
-                  type="checkbox"
-                  checked={profile.is_automation_enabled}
-                  onChange={(e) => setProfile({ ...profile, is_automation_enabled: e.target.checked })}
-                  className="switch-input"
-                />
-                {/* Standard styled switch using CSS slider */}
-                <span className="switch-slider" style={{
-                  position: 'relative',
-                  display: 'block',
-                  width: '46px',
-                  height: '24px',
-                  background: '#cbd5e1',
-                  borderRadius: '999px',
-                  cursor: 'pointer'
-                }}></span>
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+                {/* Manual Trigger Buttons */}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => handleManualTrigger('login')}
+                    disabled={triggeringManualLog !== null}
+                    className="btn-ui-secondary"
+                    style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', borderRadius: '999px', width: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f8fafc', borderColor: '#e2e8f0', color: 'var(--brand-navy)' }}
+                  >
+                    {triggeringManualLog === 'login' ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1.5s linear infinite' }} /> : <Play style={{ width: '14px', height: '14px' }} />}
+                    Log In Now
+                  </button>
+                  <button
+                    onClick={() => handleManualTrigger('logout')}
+                    disabled={triggeringManualLog !== null}
+                    className="btn-ui-secondary"
+                    style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', borderRadius: '999px', width: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f8fafc', borderColor: '#e2e8f0', color: 'var(--brand-navy)' }}
+                  >
+                    {triggeringManualLog === 'logout' ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1.5s linear infinite' }} /> : <Power style={{ width: '14px', height: '14px' }} />}
+                    Log Out Now
+                  </button>
+                </div>
+
+                {/* Separator */}
+                <div style={{ height: '24px', width: '1px', background: '#e2e8f0' }}></div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ 
+                    fontSize: '0.85rem', 
+                    fontWeight: 600, 
+                    color: profile.is_automation_enabled ? 'var(--accent-blue)' : 'var(--text-muted)' 
+                  }}>
+                    {profile.is_automation_enabled ? 'Active' : 'Paused'}
+                  </span>
+                  <label className="switch-container">
+                    <input
+                      id="automation-toggle-input"
+                      type="checkbox"
+                      checked={profile.is_automation_enabled}
+                      onChange={(e) => setProfile({ ...profile, is_automation_enabled: e.target.checked })}
+                      className="switch-input"
+                    />
+                    {/* Standard styled switch using CSS slider */}
+                    <span className="switch-slider" style={{
+                      position: 'relative',
+                      display: 'block',
+                      width: '46px',
+                      height: '24px',
+                      background: '#cbd5e1',
+                      borderRadius: '999px',
+                      cursor: 'pointer'
+                    }}></span>
+                  </label>
+                </div>
+              </div>
             </div>
+            
+            {showConsole && consoleTriggerSource === 'user' && (
+              <TerminalConsole logs={activeConsoleLogs} onClose={() => { setShowConsole(false); setConsoleTriggerSource(null); }} />
+            )}
           </div>
 
-          {/* Company Events (Admin-only panel) */}
+          {/* Admin Area Container */}
           {profile.role === 'admin' && (
-            <div className="ui-card" style={{
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '1.5rem', 
+              background: 'linear-gradient(to bottom, rgba(17, 51, 85, 0.03), rgba(17, 51, 85, 0.01))', 
+              padding: '2rem', 
+              borderRadius: '32px', 
+              border: '1px solid rgba(17, 51, 85, 0.08)' 
+            }}>
+              
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.25rem', paddingLeft: '0.5rem', paddingRight: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <ShieldCheck style={{ width: '22px', height: '22px', color: 'var(--brand-navy)' }} />
+                  <h2 style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
+                    Admin Workspace
+                  </h2>
+                </div>
+                
+                {/* Dashboard Statistics */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Logins Today</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#16a34a' }}>{adminStats.todayLogins}</span>
+                  </div>
+                  <div style={{ width: '1px', height: '24px', background: '#cbd5e1' }}></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Automated Users</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--brand-navy)' }}>{adminStats.activeAutomatedUsers}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="ui-card" style={{
+                maxWidth: '100%',
+                padding: '1.25rem 1.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '1rem',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{
+                    backgroundColor: 'rgba(30, 80, 115, 0.1)',
+                    borderRadius: '12px',
+                    padding: '0.6rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--brand-navy)'
+                  }}>
+                    <Terminal style={{ width: '20px', height: '20px' }} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: '0 0 0.15rem 0' }}>
+                      System Logs
+                    </h3>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>View all automated timelog execution history and user activities.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={(e) => { e.preventDefault(); router.push('/admin/logs'); }} 
+                  className="btn-ui-primary" 
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1.25rem', fontSize: '0.85rem', borderRadius: '999px', fontWeight: 600, border: 'none', cursor: 'pointer' }}
+                >
+                  View Logs
+                </button>
+              </div>
+
+
+
+              {/* Company Events panel inside Admin Workspace */}
+              <div className="ui-card" style={{
               maxWidth: '100%',
               padding: '2.25rem',
               display: 'flex',
@@ -914,6 +1180,7 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
                 </div>
               </div>
             </div>
+          </div>
           )}
 
           {/* Leaves, Holidays & Events Panel (Standly & Tap Integration) */}
@@ -1464,118 +1731,7 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
         </form>
       </div>
 
-        {/* 4. Automated Testing Sandbox */}
-        <div className="ui-card" style={{
-          maxWidth: '100%',
-          padding: '2.25rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1.5rem',
-          border: '1px dashed var(--accent-blue)',
-          backgroundColor: 'rgba(255, 255, 255, 0.7)',
-          backdropFilter: 'blur(10px)'
-        }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Terminal style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>
-                Playwright Live Sandbox
-              </h3>
-            </div>
-            
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                type="button"
-                onClick={() => runTestTrigger('login')}
-                disabled={testing || saving || !profile.employee_id}
-                className="btn-ui-secondary"
-                style={{
-                  padding: '0.45rem 1rem',
-                  fontSize: '0.8rem',
-                  borderRadius: '999px',
-                  width: 'auto',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  borderColor: 'var(--accent-blue)',
-                  color: 'var(--accent-blue)'
-                }}
-              >
-                <Play style={{ width: '12px', height: '12px', fill: 'var(--accent-blue)', stroke: 'none' }} />
-                Test LOG IN
-              </button>
 
-              <button
-                type="button"
-                onClick={() => runTestTrigger('logout')}
-                disabled={testing || saving || !profile.employee_id}
-                className="btn-ui-secondary"
-                style={{
-                  padding: '0.45rem 1rem',
-                  fontSize: '0.8rem',
-                  borderRadius: '999px',
-                  width: 'auto',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  borderColor: 'var(--brand-navy)',
-                  color: 'var(--brand-navy)'
-                }}
-              >
-                <Play style={{ width: '12px', height: '12px', fill: 'var(--brand-navy)', stroke: 'none' }} />
-                Test LOG OUT
-              </button>
-            </div>
-          </div>
-
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-            Verify your login credentials and attendance variables immediately. Trigger a secure dry-run and inspect the live Playwright automation steps and response logs below in real-time.
-          </p>
-
-          {/* Virtual Terminal Console */}
-          <div style={{
-            background: '#091524',
-            border: '1px solid #1e293b',
-            borderRadius: '16px',
-            fontFamily: 'monospace',
-            fontSize: '0.8rem',
-            color: '#34d399',
-            padding: '1.25rem',
-            minHeight: '160px',
-            maxHeight: '300px',
-            overflowY: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-            boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.5)'
-          }}>
-            {testLogs.length === 0 ? (
-              <span style={{ color: 'rgba(255,255,255,0.2)', fontStyle: 'italic' }}>
-                Console idle. Click "Test LOG IN" or "Test LOG OUT" to initiate an automated browser execution.
-              </span>
-            ) : (
-              testLogs.map((log, index) => {
-                let styleColor = '#34d399'; // Default terminal green
-                if (log.includes('[Error]')) styleColor = '#f87171'; // Red
-                if (log.includes('[Warning]')) styleColor = '#fbbf24'; // Orange
-                if (log.includes('[System]')) styleColor = '#60a5fa'; // Blue
-                if (log.includes('---')) styleColor = 'rgba(255,255,255,0.1)';
-                
-                return (
-                  <div key={index} style={{ color: styleColor, whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
-                    {log}
-                  </div>
-                );
-              })
-            )}
-            {testing && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#60a5fa', marginTop: '4px' }}>
-                <Loader2 className="animate-spin" style={{ width: '12px', height: '12px', animation: 'spin 1.5s linear infinite' }} />
-                <span>Playwright headless worker active. Launching portal sandbox...</span>
-              </div>
-            )}
-          </div>
-        </div>
 
       </main>
 
