@@ -1,0 +1,21 @@
+name: Hourly Timelog Trigger
+
+on:
+  schedule:
+    # Trigger at the 5th minute of every hour from 10:00 PM UTC to 10:00 AM UTC (which corresponds to 6:05 AM to 6:05 PM Philippine Time), Monday through Friday.
+    # Philippine Time (PHT, GMT+8) is 8 hours ahead of UTC.
+    # 7 AM PHT = 11 PM UTC (previous day)
+    # 8 AM PHT = 12 AM UTC
+    # 4 PM PHT = 8 AM UTC
+    # 5 PM PHT = 9 AM UTC
+    - cron: '5 22,23,0,1,2,3,4,5,6,7,8,9,10 * * 1-5'
+  workflow_dispatch: # Allows manual trigger from GitHub UI if needed
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Dynamic Hourly Timelog
+        run: |
+          # Replace the URL below with your actual production Vercel URL if it is different
+          curl -s -f "https://tap-attendance.vercel.app/api/cron/run-timelog?schedule=hourly" || echo "Trigger sent."
