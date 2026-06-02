@@ -194,8 +194,29 @@ export default function DashboardPage() {
       const response = await fetch('/api/portal-logs');
       if (response.ok) {
         const data = await response.json();
-        if (data.success) {
-          setPortalLogs(data.logs || []);
+        if (data.success && data.logs) {
+          setPortalLogs(data.logs);
+          
+          // Auto-focus calendar on the most recent log's month!
+          if (data.logs.length > 0) {
+            try {
+              const mostRecentLog = data.logs[0]; // Usually first log is the most recent
+              const cleanedDate = mostRecentLog.date.trim();
+              const [m, d, y] = cleanedDate.split('/');
+              const logYear = parseInt(y.trim().length === 2 ? `20${y.trim()}` : y.trim(), 10);
+              const logMonth = parseInt(m.trim(), 10) - 1; // 0-indexed
+              
+              const currentDateObj = new Date();
+              const currentYear = currentDateObj.getFullYear();
+              const currentMonth = currentDateObj.getMonth();
+              
+              const monthDiff = (logYear - currentYear) * 12 + (logMonth - currentMonth);
+              setCalendarMonthOffset(monthDiff);
+              console.log(`Auto-focused calendar to month offset: ${monthDiff} (for log date: ${cleanedDate})`);
+            } catch (focusErr) {
+              console.error('Failed to auto-focus calendar month:', focusErr);
+            }
+          }
         } else {
           setSyncError(data.error || 'Failed to sync portal logs.');
         }
@@ -1574,13 +1595,18 @@ export default function DashboardPage() {
                 <span>{syncError}</span>
               </div>
             ) : (() => {
-              // Group logs by date
+              // Group logs by date with robust whitespace trimming
               const getLogDateKey = (logDateStr: string) => {
                 try {
-                  const [m, d, y] = logDateStr.split('/');
-                  const yearStr = y.length === 2 ? `20${y}` : y;
-                  const monthStr = m.padStart(2, '0');
-                  const dayStr = d.padStart(2, '0');
+                  const cleaned = logDateStr.trim();
+                  const [m, d, y] = cleaned.split('/');
+                  const cleanY = y.trim();
+                  const cleanM = m.trim();
+                  const cleanD = d.trim();
+                  
+                  const yearStr = cleanY.length === 2 ? `20${cleanY}` : cleanY;
+                  const monthStr = cleanM.padStart(2, '0');
+                  const dayStr = cleanD.padStart(2, '0');
                   return `${yearStr}-${monthStr}-${dayStr}`;
                 } catch {
                   return '';
