@@ -1764,7 +1764,7 @@ export default function DashboardPage() {
                                 {cell.day}
                               </span>
                               
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexGrow: 1, justifyContent: 'flex-start' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexGrow: 1, justifyContent: 'flex-start' }}>
                                 {dayLogs.map((log: any, idx: number) => {
                                   const isTimeIn = log.mode.toLowerCase().includes('in');
                                   
@@ -1772,16 +1772,16 @@ export default function DashboardPage() {
                                     <div key={idx} style={{
                                       fontSize: '0.58rem',
                                       fontWeight: 800,
-                                      padding: '2px 4px',
+                                      padding: '2.5px 5px',
                                       borderRadius: '4px',
-                                      backgroundColor: isTimeIn ? '#ecfdf5' : '#eff6ff',
-                                      color: isTimeIn ? '#059669' : '#2563eb',
+                                      backgroundColor: isTimeIn ? '#f0fdf4' : '#fef2f2',
+                                      color: isTimeIn ? '#16a34a' : '#dc2626',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'space-between',
                                       gap: '2px',
                                       border: '1px solid',
-                                      borderColor: isTimeIn ? 'rgba(5, 150, 105, 0.15)' : 'rgba(37, 99, 235, 0.15)'
+                                      borderColor: isTimeIn ? 'rgba(22, 163, 74, 0.15)' : 'rgba(220, 38, 38, 0.15)'
                                     }}>
                                       <span>{isTimeIn ? 'In' : 'Out'}</span>
                                       <span>{log.time}</span>
@@ -1821,8 +1821,8 @@ export default function DashboardPage() {
                                     fontWeight: 700,
                                     padding: '2px 8px',
                                     borderRadius: '999px',
-                                    backgroundColor: isTimeIn ? '#ecfdf5' : '#eff6ff',
-                                    color: isTimeIn ? '#059669' : '#2563eb',
+                                    backgroundColor: isTimeIn ? '#f0fdf4' : '#fef2f2',
+                                    color: isTimeIn ? '#16a34a' : '#dc2626',
                                     textTransform: 'uppercase'
                                   }}>
                                     {log.mode}
