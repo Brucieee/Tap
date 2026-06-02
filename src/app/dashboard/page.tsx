@@ -241,6 +241,26 @@ export default function DashboardPage() {
       const pastDate = new Date();
       pastDate.setDate(today.getDate() - i);
       
+      // Enforce Cut-off Boundary (1st Cut-off: 1-15, 2nd Cut-off: 16-31 of the current month)
+      const todayDay = today.getDate();
+      const pastDay = pastDate.getDate();
+      const isTodayInFirstCutoff = todayDay <= 15;
+      const isSameMonth = pastDate.getMonth() === today.getMonth() && pastDate.getFullYear() === today.getFullYear();
+      
+      if (!isSameMonth) {
+        continue; // Skip dates in a different month (belongs to a closed past cut-off)
+      }
+      
+      if (isTodayInFirstCutoff) {
+        if (pastDay < 1 || pastDay > 15) {
+          continue; // Skip if pastDate belongs to the 2nd cut-off
+        }
+      } else {
+        if (pastDay < 16) {
+          continue; // Skip if pastDate belongs to the 1st cut-off
+        }
+      }
+      
       const dayOfWeek = pastDate.getDay(); // 0 = Sunday, 6 = Saturday
       if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Skip weekends
 
