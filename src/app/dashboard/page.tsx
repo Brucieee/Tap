@@ -185,6 +185,16 @@ export default function DashboardPage() {
   const [calendarMonthOffset, setCalendarMonthOffset] = useState<number>(0);
   const [recoveryStatus, setRecoveryStatus] = useState<{ date: string; state: 'running' | 'success' | 'failed' } | null>(null);
   const attemptedRecoveriesRef = useRef<Set<string>>(new Set());
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; date: string; type: 'info' | 'success' | 'failed' }>>([]);
+  const [isAdminWorkspaceExpanded, setIsAdminWorkspaceExpanded] = useState<boolean>(false);
+
+  const addToast = (message: string, date: string, type: 'info' | 'success' | 'failed') => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, message, date, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 6000);
+  };
 
   const router = useRouter();
   const supabase = createClient();
@@ -249,21 +259,25 @@ export default function DashboardPage() {
       const targetDate = missedDatesToRecover[0]; // Recover the most recent one first
       console.log(`[Auto-Recovery] Triggering Time Out auto-recovery for missed workday: ${targetDate}`);
       setRecoveryStatus({ date: targetDate, state: 'running' });
+      addToast(`Detected missing Time Out for workday ${targetDate}. Running self-healing auto-recovery...`, targetDate, 'info');
       
       try {
         const res = await fetch(`/api/cron/run-timelog?mode=logout&date=${targetDate}`);
         if (res.ok) {
           const data = await res.json();
           setRecoveryStatus({ date: targetDate, state: 'success' });
+          addToast(`Successfully recovered missed Time Out for workday ${targetDate}!`, targetDate, 'success');
           console.log('[Auto-Recovery] Timeout recovered successfully:', data);
           // Re-sync logs from portal to instantly reflect the new Time Out on dashboard
           handleSyncPortalLogs();
         } else {
           setRecoveryStatus({ date: targetDate, state: 'failed' });
+          addToast(`Failed to auto-recover missed Time Out for workday ${targetDate}.`, targetDate, 'failed');
           console.error('[Auto-Recovery] Failed to recover missed Time Out.');
         }
       } catch (err) {
         setRecoveryStatus({ date: targetDate, state: 'failed' });
+        addToast(`Failed to auto-recover missed Time Out for workday ${targetDate}.`, targetDate, 'failed');
         console.error('[Auto-Recovery] Error during auto-recovery execution:', err);
       } finally {
         setTimeout(() => setRecoveryStatus(null), 5000);
@@ -584,6 +598,8 @@ export default function DashboardPage() {
       displayDate = parsedDate.toLocaleDateString();
     }
     
+    addToast(`Manually triggering time ${mode === 'login' ? 'In' : 'Out'} for ${displayDate}...`, displayDate, 'info');
+    
     setActiveConsoleLogs([{ 
       status: 'info', 
       message: `Initializing manual ${mode} override sequence on date: ${displayDate}...` 
@@ -628,13 +644,16 @@ export default function DashboardPage() {
                 
                 if (myResult && myResult.status === 'success') {
                   setMessage({ text: `Successfully triggered ${mode === 'login' ? 'Log In' : 'Log Out'}!`, type: 'success' });
+                  addToast(`Successfully manually timed ${mode === 'login' ? 'In' : 'Out'} for ${displayDate}!`, displayDate, 'success');
                   setActiveConsoleLogs(prev => [...prev, { status: 'success', message: `Manual trigger finished successfully. Mode: ${modeText}` }]);
                 } else if (myResult && myResult.status === 'skipped') {
                   setMessage({ text: myResult.message || `Skipped manual ${mode}.`, type: 'success' });
+                  addToast(myResult.message || `Skipped manual time ${mode === 'login' ? 'In' : 'Out'}.`, displayDate, 'info');
                   setActiveConsoleLogs(prev => [...prev, { status: 'warn', message: myResult.message || `Manual run skipped.` }]);
                 } else {
                   const errorMsg = myResult?.message || finalData.error || 'Unknown error';
                   setMessage({ text: `Failed to trigger ${mode}: ${errorMsg}`, type: 'error' });
+                  addToast(`Failed manual time ${mode === 'login' ? 'In' : 'Out'}: ${errorMsg}`, displayDate, 'failed');
                   setActiveConsoleLogs(prev => [...prev, { status: 'error', message: `Execution failed: ${errorMsg}` }]);
                 }
               } else {
@@ -648,6 +667,7 @@ export default function DashboardPage() {
       }
     } catch (err: any) {
       setMessage({ text: `Execution error: ${err.message}`, type: 'error' });
+      addToast(`Execution error: ${err.message}`, displayDate, 'failed');
       setActiveConsoleLogs(prev => [...prev, { status: 'error', message: `Fatal execution error: ${err.message}` }]);
     } finally {
       setTriggeringManualLog(null);
@@ -692,6 +712,114 @@ export default function DashboardPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <BatEffect trigger={triggerBatEffect} setTrigger={setTriggerBatEffect} />
+      
+      {/* Premium Toast Notification Center */}
+      <div style={{
+        position: 'fixed',
+        top: '24px',
+        right: '24px',
+        zIndex: 9999,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        maxWidth: '380px',
+        width: '100%',
+        pointerEvents: 'none'
+      }}>
+        {toasts.map((toast) => {
+          let bg = 'rgba(255, 255, 255, 0.9)';
+          let border = 'rgba(226, 232, 240, 0.8)';
+          let color = 'var(--brand-navy)';
+          let progressColor = 'var(--accent-blue)';
+          
+          if (toast.type === 'success') {
+            bg = 'rgba(240, 253, 244, 0.95)';
+            border = 'rgba(187, 247, 208, 0.8)';
+            color = '#15803d';
+            progressColor = '#22c55e';
+          } else if (toast.type === 'failed') {
+            bg = 'rgba(254, 242, 242, 0.95)';
+            border = 'rgba(252, 165, 165, 0.8)';
+            color = '#b91c1c';
+            progressColor = '#ef4444';
+          } else if (toast.type === 'info') {
+            bg = 'rgba(239, 246, 255, 0.95)';
+            border = 'rgba(191, 219, 254, 0.8)';
+            color = '#1d4ed8';
+            progressColor = '#3b82f6';
+          }
+
+          return (
+            <div
+              key={toast.id}
+              style={{
+                pointerEvents: 'auto',
+                padding: '1rem 1.25rem',
+                borderRadius: '16px',
+                backgroundColor: bg,
+                border: '1px solid',
+                borderColor: border,
+                color: color,
+                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.08)',
+                backdropFilter: 'blur(12px)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.5)', flexShrink: 0, marginTop: '2px' }}>
+                {toast.type === 'success' ? (
+                  <Check style={{ width: '12px', height: '12px', strokeWidth: 3 }} />
+                ) : toast.type === 'failed' ? (
+                  <AlertCircle style={{ width: '12px', height: '12px', strokeWidth: 3 }} />
+                ) : (
+                  <Clock style={{ width: '12px', height: '12px', strokeWidth: 3 }} />
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 750 }}>
+                  {toast.type === 'success' ? 'Task Completed' : toast.type === 'failed' ? 'Task Failed' : 'Automation Active'}
+                </span>
+                <span style={{ fontSize: '0.75rem', lineHeight: '1.4', opacity: 0.9, fontWeight: 500 }}>
+                  {toast.message}
+                </span>
+              </div>
+              
+              <button
+                onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'currentColor',
+                  opacity: 0.6,
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  padding: 0,
+                  marginLeft: 'auto',
+                  flexShrink: 0,
+                  fontWeight: 800,
+                  lineHeight: 1
+                }}
+              >
+                ×
+              </button>
+
+              <div style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                height: '3px',
+                width: '100%',
+                backgroundColor: progressColor,
+                animation: 'shrinkProgress 6s linear forwards'
+              }} />
+            </div>
+          );
+        })}
+      </div>
       
       {/* Main Grid Content */}
       <main style={{
@@ -884,12 +1012,33 @@ export default function DashboardPage() {
               border: '1px solid rgba(17, 51, 85, 0.08)' 
             }}>
               
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.25rem', paddingLeft: '0.5rem', paddingRight: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.25rem', paddingLeft: '0.5rem', paddingRight: '0.5rem', width: '100%', flexWrap: 'wrap', gap: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   <ShieldCheck style={{ width: '22px', height: '22px', color: 'var(--brand-navy)' }} />
                   <h2 style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
                     Admin Workspace
                   </h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsAdminWorkspaceExpanded(!isAdminWorkspaceExpanded)}
+                    className="btn-ui-secondary"
+                    style={{
+                      padding: '0.45rem 1rem',
+                      fontSize: '0.75rem',
+                      borderRadius: '999px',
+                      width: 'auto',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      background: 'rgba(17, 51, 85, 0.05)',
+                      border: 'none',
+                      color: 'var(--brand-navy)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {isAdminWorkspaceExpanded ? 'Collapse' : 'Expand'} Workspace
+                  </button>
                 </div>
                 
                 {/* Dashboard Statistics */}
@@ -905,6 +1054,9 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+
+              {isAdminWorkspaceExpanded && (
+                <>
 
               <div className="ui-card" style={{
                 maxWidth: '100%',
@@ -1220,6 +1372,8 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+                </>
+              )}
           </div>
           )}
 
@@ -2388,6 +2542,20 @@ export default function DashboardPage() {
         }
         .animate-spin {
           animation: spin 1s linear infinite;
+        }
+        @keyframes slideIn {
+          from {
+            transform: translateX(120%) scale(0.9);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0) scale(1);
+            opacity: 1;
+          }
+        }
+        @keyframes shrinkProgress {
+          from { width: 100%; }
+          to { width: 0%; }
         }
       `}</style>
     </div>
