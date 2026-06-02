@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
+import { decrypt } from '@/utils/encryption';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,8 +26,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden. Admin privileges required.' }, { status: 403 });
     }
 
-    // Retrieve all logs
-    const { data: logs, error: logsError } = await supabase
+    // Retrieve all users from Auth using the Admin Client to map emails
+    const adminClient = createAdminClient();
+    
+    // Retrieve all logs using the admin client to bypass Row Level Security (RLS)
+    const { data: logs, error: logsError } = await adminClient
       .from('timelog_history')
       .select('*')
       .order('created_at', { ascending: false });
@@ -35,8 +39,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to retrieve logs.', details: logsError.message }, { status: 500 });
     }
 
-    // Retrieve all users from Auth using the Admin Client to map emails
-    const adminClient = createAdminClient();
     const { data: authData, error: authUsersError } = await adminClient.auth.admin.listUsers();
     
     if (authUsersError) {
@@ -51,10 +53,21 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const formattedLogs = logs.map(log => ({
-      ...log,
-      email: userEmailMap[log.user_id] || 'Unknown User'
-    }));
+    const formattedLogs = logs.map(log => {
+      let decryptedEmpId = log.employee_id;
+      try {
+        if (log.employee_id && log.employee_id.length > 10) {
+          decryptedEmpId = decrypt(log.employee_id);
+        }
+      } catch (err) {
+        // Fallback to raw string if it is already decrypted or fails to decrypt
+      }
+      return {
+        ...log,
+        employee_id: decryptedEmpId,
+        email: userEmailMap[log.user_id] || 'Unknown User'
+      };
+    });
 
     return NextResponse.json(formattedLogs);
   } catch (error: any) {
