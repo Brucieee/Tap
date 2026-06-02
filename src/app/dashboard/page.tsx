@@ -871,125 +871,6 @@ export default function DashboardPage() {
         
         {/* Main Controls Container */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2.25rem' }}>
-          
-          {/* 1. Header Control Panel Card */}
-          <div className="ui-card" style={{
-            maxWidth: '100%',
-            padding: '1.25rem 1.5rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1rem',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '1rem' }}>
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>
-                  Automation Control
-                </h3>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
-                {/* Custom Date Picker for Manual Trigger */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date:</span>
-                  <input
-                    type="date"
-                    value={manualDate}
-                    onChange={(e) => setManualDate(e.target.value)}
-                    style={{
-                      padding: '0.4rem 0.75rem',
-                      fontSize: '0.75rem',
-                      borderRadius: '999px',
-                      border: '1px solid #cbd5e1',
-                      color: 'var(--brand-navy)',
-                      outline: 'none',
-                      background: '#ffffff',
-                      fontFamily: 'inherit',
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                  />
-                  {manualDate && (
-                    <button
-                      type="button"
-                      onClick={() => setManualDate('')}
-                      style={{
-                        background: 'rgba(239, 68, 68, 0.08)',
-                        border: 'none',
-                        color: '#ef4444',
-                        cursor: 'pointer',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        borderRadius: '999px',
-                        padding: '0.2rem 0.5rem'
-                      }}
-                      title="Clear custom date"
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
-
-                {/* Manual Trigger Buttons */}
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    onClick={() => handleManualTrigger('login')}
-                    disabled={triggeringManualLog !== null}
-                    className="btn-ui-secondary"
-                    style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', borderRadius: '999px', width: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f8fafc', borderColor: '#e2e8f0', color: 'var(--brand-navy)' }}
-                  >
-                    {triggeringManualLog === 'login' ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1.5s linear infinite' }} /> : <Play style={{ width: '14px', height: '14px' }} />}
-                    Log In Now
-                  </button>
-                  <button
-                    onClick={() => handleManualTrigger('logout')}
-                    disabled={triggeringManualLog !== null}
-                    className="btn-ui-secondary"
-                    style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', borderRadius: '999px', width: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f8fafc', borderColor: '#e2e8f0', color: 'var(--brand-navy)' }}
-                  >
-                    {triggeringManualLog === 'logout' ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1.5s linear infinite' }} /> : <Power style={{ width: '14px', height: '14px' }} />}
-                    Log Out Now
-                  </button>
-                </div>
-
-                {/* Separator */}
-                <div style={{ height: '24px', width: '1px', background: '#e2e8f0' }}></div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ 
-                    fontSize: '0.85rem', 
-                    fontWeight: 600, 
-                    color: profile.is_automation_enabled ? 'var(--accent-blue)' : 'var(--text-muted)' 
-                  }}>
-                    {profile.is_automation_enabled ? 'Active' : 'Paused'}
-                  </span>
-                  <label className="switch-container">
-                    <input
-                      id="automation-toggle-input"
-                      type="checkbox"
-                      checked={profile.is_automation_enabled}
-                      onChange={(e) => setProfile({ ...profile, is_automation_enabled: e.target.checked })}
-                      className="switch-input"
-                    />
-                    {/* Standard styled switch using CSS slider */}
-                    <span className="switch-slider" style={{
-                      position: 'relative',
-                      display: 'block',
-                      width: '46px',
-                      height: '24px',
-                      background: '#cbd5e1',
-                      borderRadius: '999px',
-                      cursor: 'pointer'
-                    }}></span>
-                  </label>
-                </div>
-              </div>
-            </div>
-            
-            {showConsole && consoleTriggerSource === 'user' && (
-              <TerminalConsole logs={activeConsoleLogs} onClose={() => { setShowConsole(false); setConsoleTriggerSource(null); }} />
-            )}
-          </div>
 
           {/* Admin Area Container */}
           {profile.role === 'admin' && (
@@ -1620,6 +1501,125 @@ export default function DashboardPage() {
                 </div>
               );
             })()}
+          </div>
+
+          {/* 1. Header Control Panel Card */}
+          <div className="ui-card" style={{
+            maxWidth: '100%',
+            padding: '1.25rem 1.5rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>
+                  Automation Control
+                </h3>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+                {/* Custom Date Picker for Manual Trigger */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date:</span>
+                  <input
+                    type="date"
+                    value={manualDate}
+                    onChange={(e) => setManualDate(e.target.value)}
+                    style={{
+                      padding: '0.4rem 0.75rem',
+                      fontSize: '0.75rem',
+                      borderRadius: '999px',
+                      border: '1px solid #cbd5e1',
+                      color: 'var(--brand-navy)',
+                      outline: 'none',
+                      background: '#ffffff',
+                      fontFamily: 'inherit',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  />
+                  {manualDate && (
+                    <button
+                      type="button"
+                      onClick={() => setManualDate('')}
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        border: 'none',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        borderRadius: '999px',
+                        padding: '0.2rem 0.5rem'
+                      }}
+                      title="Clear custom date"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                {/* Manual Trigger Buttons */}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => handleManualTrigger('login')}
+                    disabled={triggeringManualLog !== null}
+                    className="btn-ui-secondary"
+                    style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', borderRadius: '999px', width: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f8fafc', borderColor: '#e2e8f0', color: 'var(--brand-navy)' }}
+                  >
+                    {triggeringManualLog === 'login' ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1.5s linear infinite' }} /> : <Play style={{ width: '14px', height: '14px' }} />}
+                    Log In Now
+                  </button>
+                  <button
+                    onClick={() => handleManualTrigger('logout')}
+                    disabled={triggeringManualLog !== null}
+                    className="btn-ui-secondary"
+                    style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', borderRadius: '999px', width: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f8fafc', borderColor: '#e2e8f0', color: 'var(--brand-navy)' }}
+                  >
+                    {triggeringManualLog === 'logout' ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1.5s linear infinite' }} /> : <Power style={{ width: '14px', height: '14px' }} />}
+                    Log Out Now
+                  </button>
+                </div>
+
+                {/* Separator */}
+                <div style={{ height: '24px', width: '1px', background: '#e2e8f0' }}></div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ 
+                    fontSize: '0.85rem', 
+                    fontWeight: 600, 
+                    color: profile.is_automation_enabled ? 'var(--accent-blue)' : 'var(--text-muted)' 
+                  }}>
+                    {profile.is_automation_enabled ? 'Active' : 'Paused'}
+                  </span>
+                  <label className="switch-container">
+                    <input
+                      id="automation-toggle-input"
+                      type="checkbox"
+                      checked={profile.is_automation_enabled}
+                      onChange={(e) => setProfile({ ...profile, is_automation_enabled: e.target.checked })}
+                      className="switch-input"
+                    />
+                    {/* Standard styled switch using CSS slider */}
+                    <span className="switch-slider" style={{
+                      position: 'relative',
+                      display: 'block',
+                      width: '46px',
+                      height: '24px',
+                      background: '#cbd5e1',
+                      borderRadius: '999px',
+                      cursor: 'pointer'
+                    }}></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            
+            {showConsole && consoleTriggerSource === 'user' && (
+              <TerminalConsole logs={activeConsoleLogs} onClose={() => { setShowConsole(false); setConsoleTriggerSource(null); }} />
+            )}
           </div>
 
 
