@@ -199,7 +199,13 @@ export default function DashboardPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  const checkAndRecoverMissedTimeouts = async (logs: any[]) => {
+  const checkAndRecoverMissedTimeouts = async (logs: any[], activeWfhDays?: string[], isAutomationEnabled?: boolean) => {
+    const automationEnabled = isAutomationEnabled !== undefined ? isAutomationEnabled : profile.is_automation_enabled;
+    if (!automationEnabled) {
+      console.log('[Auto-Recovery] Automation is disabled. Skipping self-healing checks.');
+      return;
+    }
+
     // 1. Group logs by date using robust ISO formatting
     const getLogDateKeyLocal = (logDateStr: string) => {
       try {
@@ -251,7 +257,8 @@ export default function DashboardPage() {
       // Check if this date was configured as WFH day
       const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const pastWeekdayName = WEEKDAY_NAMES[dayOfWeek];
-      const isWfhDayForPastDate = profile.wfh_days && profile.wfh_days.includes(pastWeekdayName);
+      const wfhDaysList = activeWfhDays || profile.wfh_days;
+      const isWfhDayForPastDate = wfhDaysList && wfhDaysList.includes(pastWeekdayName);
 
       if (hasTimeIn && !hasTimeOut && !attemptedRecoveriesRef.current.has(`${dateKey}-logout`)) {
         // Found a missed timeout! Add to queue and mark as attempted to prevent recursion loops
@@ -300,7 +307,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleSyncPortalLogs = async () => {
+  const handleSyncPortalLogs = async (currentWfhDays?: string[], isAutomationEnabled?: boolean) => {
     setLoadingPortalLogs(true);
     setSyncError('');
     try {
@@ -332,7 +339,9 @@ export default function DashboardPage() {
           }
 
           // Trigger missed log auto-recovery!
-          checkAndRecoverMissedTimeouts(data.logs);
+          const activeWfhDays = currentWfhDays || profile.wfh_days;
+          const automationEnabled = isAutomationEnabled !== undefined ? isAutomationEnabled : profile.is_automation_enabled;
+          checkAndRecoverMissedTimeouts(data.logs, activeWfhDays, automationEnabled);
         } else {
           setSyncError(data.error || 'Failed to sync portal logs.');
         }
@@ -386,7 +395,7 @@ export default function DashboardPage() {
           });
 
           if (passwordPresent) {
-            handleSyncPortalLogs();
+            handleSyncPortalLogs(data.wfh_days || [], data.is_automation_enabled !== undefined ? data.is_automation_enabled : true);
           }
         }
       } catch (error) {
@@ -1810,7 +1819,7 @@ export default function DashboardPage() {
               </div>
               <button 
                 type="button"
-                onClick={handleSyncPortalLogs}
+                onClick={() => handleSyncPortalLogs()}
                 disabled={loadingPortalLogs || !hasPasswordStored}
                 className="btn-ui-secondary"
                 style={{
