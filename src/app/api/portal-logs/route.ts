@@ -150,11 +150,21 @@ export async function GET(request: NextRequest) {
 
       const dateVal = row[dateCellIndex];
 
-      // Find the cell representing mode/type (In, Out, Time In, Time Out, Correction, etc.)
+      // Find the cell representing mode/type (I for In, O for Out, or full strings)
       let modeVal = 'Unknown';
-      const inOutCell = row.find(cell => /\b(in|out|login|logout|time-in|time-out|correction)\b/i.test(cell));
+      const inOutCell = row.find(cell => {
+        const c = cell.trim().toUpperCase();
+        return c === 'I' || c === 'O' || /\b(in|out|login|logout|time-in|time-out|correction)\b/i.test(c);
+      });
       if (inOutCell) {
-        modeVal = inOutCell;
+        const trimmed = inOutCell.trim().toUpperCase();
+        if (trimmed === 'I') {
+          modeVal = 'Time In';
+        } else if (trimmed === 'O') {
+          modeVal = 'Time Out';
+        } else {
+          modeVal = inOutCell;
+        }
       }
 
       // Find a time-like cell (e.g. 08:00 AM, 17:00, 5:00 PM, 08:00:00)
