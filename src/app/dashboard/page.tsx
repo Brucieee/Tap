@@ -311,70 +311,7 @@ export default function DashboardPage() {
     router.push('/login');
   };
 
-  const runTestTrigger = async (testMode: 'login' | 'logout') => {
-    setTesting(true);
-    setTestLogs([`[System] Starting local test run in ${testMode.toUpperCase()} mode...`]);
-    
-    try {
-      const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-      const currentFormattedDate = new Date().toISOString().split('T')[0];
 
-      setTestLogs(prev => [...prev, `[System] Current day is evaluated as: ${currentDay}`]);
-      setTestLogs(prev => [...prev, `[System] Current date is evaluated as: ${currentFormattedDate}`]);
-      
-      const isWfh = profile.wfh_days.some(d => d.toLowerCase() === currentDay.toLowerCase());
-      if (!isWfh) {
-        setTestLogs(prev => [
-          ...prev, 
-          `[Warning] Today (${currentDay}) is not set as a WFH day in your schedule list!`,
-          `[System] Overriding day condition for this custom manual test run...`
-        ]);
-      }
-
-      setTestLogs(prev => [...prev, `[System] Querying local Playwright route at: /api/cron/run-timelog`]);
-
-      const response = await fetch(`/api/cron/run-timelog?mode=${testMode}&day=${currentDay}&date=${currentFormattedDate}&test=true`);
-      
-      let data: any = {};
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        throw new Error(`Server returned HTML error (Status ${response.status}). This means Vercel's serverless function crashed or timed out before it could respond. 
-
-This happens because PLAYWRIGHT_SERVICE_URL is not configured in your Vercel Environment Variables. 
-
-Since Vercel Serverless is size-restricted, running browser automation locally (chromium.launch()) crashes. You must add the free PLAYWRIGHT_SERVICE_URL env to your Vercel project settings to delegate the headless browser run!`);
-      }
-
-      if (response.ok) {
-        setTestLogs(prev => [
-          ...prev,
-          `[API Response Status] 200 OK`,
-          `[API Message] ${data.message}`,
-          `[Evaluated Mode] ${data.mode}`,
-          `[Evaluated Day] ${data.dayEvaluated}`,
-          `[Evaluated Date] ${data.dateEvaluated}`,
-          `------------------------------`,
-          ...data.results.map((res: any) => 
-            `[User Result] Employee ID: ${res.employeeId} | Status: ${res.status.toUpperCase()} | Info: ${res.message}`
-          ),
-          `------------------------------`,
-          `[Execution Summary] Success: ${data.summary.success} | Failed: ${data.summary.failed} | Skipped: ${data.summary.skipped}`
-        ]);
-      } else {
-        throw new Error((data.error || 'Server cron failed.') + (data.details ? ' | Details: ' + data.details : ''));
-      }
-    } catch (err: any) {
-      setTestLogs(prev => [
-        ...prev,
-        `[Error] Execution aborted: ${err.message}`,
-        `[Advice] Ensure your database tables are migrated and your Supabase credentials in .env.local are correct!`
-      ]);
-    } finally {
-      setTesting(false);
-    }
-  };
 
   const handleToggleExcludeUser = (userId: string) => {
     setExcludedUsers(prev => 
@@ -451,29 +388,23 @@ Since Vercel Serverless is size-restricted, running browser automation locally (
     }
   };
 
-  const handleManualTrigger = async (mode: 'login' | 'logout', targetUserId?: string, overrideDate?: string) => {
+  const handleManualTrigger = async (mode: 'login' | 'logout') => {
+    const modeText = mode === 'login' ? 'Log In' : 'Log Out';
     setTriggeringManualLog(mode);
     setMessage({ text: '', type: '' });
     
     // Set triggering source and start terminal
-    const source = targetUserId ? 'admin' : 'user';
-    setConsoleTriggerSource(source);
+    setConsoleTriggerSource('user');
     
-    const displayDate = overrideDate || new Date().toLocaleDateString();
+    const displayDate = new Date().toLocaleDateString();
     setActiveConsoleLogs([{ 
       status: 'info', 
-      message: `Initializing manual ${mode} override sequence ${targetUserId ? `for target user` : ''} on date: ${displayDate}...` 
+      message: `Initializing manual ${mode} override sequence on date: ${displayDate}...` 
     }]);
     setShowConsole(true);
     
     try {
       let url = `/api/cron/run-timelog?mode=${mode}&test=true&stream=true`;
-      if (targetUserId) {
-        url += `&userId=${targetUserId}`;
-      }
-      if (overrideDate) {
-        url += `&date=${overrideDate}`;
-      }
       
       const response = await fetch(url);
       if (!response.ok) {
