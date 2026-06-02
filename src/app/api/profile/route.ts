@@ -34,7 +34,8 @@ export async function GET() {
           logout_time: '17:00:00',
           is_automation_enabled: true,
           wfh_reason: 'Work from home',
-          role: 'user'
+          role: 'user',
+          wfh_offsets: {}
         });
       }
       return NextResponse.json({ error: 'Database query failed.', details: dbError.message }, { status: 500 });
@@ -75,7 +76,8 @@ export async function POST(request: NextRequest) {
       login_time,
       logout_time,
       is_automation_enabled,
-      wfh_reason
+      wfh_reason,
+      wfh_offsets
     } = body;
 
     // Encrypt the credentials
@@ -106,7 +108,8 @@ export async function POST(request: NextRequest) {
         login_time: login_time || '08:00:00',
         logout_time: logout_time || '17:00:00',
         is_automation_enabled: is_automation_enabled !== undefined ? is_automation_enabled : true,
-        wfh_reason: wfh_reason || 'Work from home'
+        wfh_reason: wfh_reason || 'Work from home',
+        wfh_offsets: wfh_offsets || {}
       });
 
     if (upsertError) {

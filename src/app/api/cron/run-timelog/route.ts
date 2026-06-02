@@ -417,16 +417,30 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
 
       // Check WFH schedule match
       // Skip this check if running manually triggered test from the dashboard
-      const wfhDays = profile.wfh_days || [];
-      const isWfhDay = wfhDays.some((day: string) => day.toLowerCase() === currentDay.toLowerCase());
+      const offsets = profile.wfh_offsets || {};
+      const offsetOverride = offsets[currentDate]; // YYYY-MM-DD
+      
+      let isWfhDay = false;
+      let wfhReasonText = '';
+      if (offsetOverride === 'wfh') {
+        isWfhDay = true;
+        wfhReasonText = `Custom override forced WFH today (${currentDate})`;
+      } else if (offsetOverride === 'office') {
+        isWfhDay = false;
+        wfhReasonText = `Custom override forced Office/On-Site today (${currentDate})`;
+      } else {
+        const wfhDays = profile.wfh_days || [];
+        isWfhDay = wfhDays.some((day: string) => day.toLowerCase() === currentDay.toLowerCase());
+        wfhReasonText = `Today (${currentDay}) is not in WFH schedule [${wfhDays.join(', ')}]`;
+      }
 
       if (!isWfhDay && !isManualTest) {
-        console.log(`[Profile Evaluation] User ${userId}: Skipped - Today (${currentDay}) is not in WFH schedule.`);
+        console.log(`[Profile Evaluation] User ${userId}: Skipped - ${wfhReasonText}.`);
         results.push({
           userId,
           employeeId: 'Configured',
           status: 'skipped',
-          message: `Today (${currentDay}) is not in user's WFH schedule [${wfhDays.join(', ')}].`
+          message: wfhReasonText
         });
         continue;
       }

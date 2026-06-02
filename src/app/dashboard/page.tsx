@@ -135,7 +135,8 @@ export default function DashboardPage() {
     logout_time: '17:00',
     is_automation_enabled: true,
     wfh_reason: 'Work from home',
-    role: 'user'
+    role: 'user',
+    wfh_offsets: {} as Record<string, 'wfh' | 'office'>
   });
 
   // Company Events State
@@ -166,6 +167,66 @@ export default function DashboardPage() {
   const [triggeringManualLog, setTriggeringManualLog] = useState<'login' | 'logout' | null>(null);
   const [manualDate, setManualDate] = useState('');
   const [adminStats, setAdminStats] = useState({ todayLogins: 0, todayLogouts: 0, activeAutomatedUsers: 0 });
+  
+  // Date-Specific Schedule Overrides / Offsets
+  const [overrideDate, setOverrideDate] = useState('');
+  const [overrideStatus, setOverrideStatus] = useState<'wfh' | 'office'>('wfh');
+
+  const handleAddOverride = async () => {
+    if (!overrideDate) {
+      addToast('Error', 'Please select a date first.', 'sync', 'failed');
+      return;
+    }
+    const newOffsets = {
+      ...(profile.wfh_offsets || {}),
+      [overrideDate]: overrideStatus
+    };
+    setProfile(prev => ({
+      ...prev,
+      wfh_offsets: newOffsets
+    }));
+    setOverrideDate('');
+    await saveWfhOffsets(newOffsets);
+  };
+
+  const handleDeleteOverride = async (dateKey: string) => {
+    const newOffsets = { ...(profile.wfh_offsets || {}) };
+    delete newOffsets[dateKey];
+    setProfile(prev => ({
+      ...prev,
+      wfh_offsets: newOffsets
+    }));
+    await saveWfhOffsets(newOffsets);
+  };
+
+  const saveWfhOffsets = async (newOffsets: Record<string, 'wfh' | 'office'>) => {
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          employee_id: profile.employee_id,
+          company_password: '__PRESERVED_PASSWORD__',
+          wfh_days: profile.wfh_days,
+          login_time: `${profile.login_time}:00`,
+          logout_time: `${profile.logout_time}:00`,
+          is_automation_enabled: profile.is_automation_enabled,
+          wfh_reason: profile.wfh_reason,
+          wfh_offsets: newOffsets
+        }),
+      });
+      if (response.ok) {
+        addToast('Success', 'Schedule overrides updated successfully!', 'sync', 'success');
+      } else {
+        const errorData = await response.json();
+        addToast('Error', errorData.error || 'Failed to update overrides.', 'sync', 'failed');
+      }
+    } catch (error: any) {
+      addToast('Error', error.message || 'Error occurred while saving.', 'sync', 'failed');
+    }
+  };
   
   // Real-time Virtual Terminal Logging
   const [activeConsoleLogs, setActiveConsoleLogs] = useState<Array<{ status: string; message: string }>>([]);
@@ -282,11 +343,21 @@ export default function DashboardPage() {
       const hasTimeIn = dayEntries.some(log => log.mode.toLowerCase().includes('in'));
       const hasTimeOut = dayEntries.some(log => log.mode.toLowerCase().includes('out'));
 
-      // Check if this date was configured as WFH day
-      const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const pastWeekdayName = WEEKDAY_NAMES[dayOfWeek];
-      const wfhDaysList = activeWfhDays || profile.wfh_days;
-      const isWfhDayForPastDate = wfhDaysList && wfhDaysList.includes(pastWeekdayName);
+      // Check for WFH schedule offset / override for this specific date
+      const offsets = profile.wfh_offsets || {};
+      const offsetOverride = offsets[dateKey];
+      
+      let isWfhDayForPastDate = false;
+      if (offsetOverride === 'wfh') {
+        isWfhDayForPastDate = true;
+      } else if (offsetOverride === 'office') {
+        isWfhDayForPastDate = false;
+      } else {
+        const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const pastWeekdayName = WEEKDAY_NAMES[dayOfWeek];
+        const wfhDaysList = activeWfhDays || profile.wfh_days;
+        isWfhDayForPastDate = wfhDaysList && wfhDaysList.includes(pastWeekdayName);
+      }
 
       if (hasTimeIn && !hasTimeOut && !attemptedRecoveriesRef.current.has(`${dateKey}-logout`)) {
         // Found a missed timeout! Add to queue and mark as attempted to prevent recursion loops
@@ -484,7 +555,8 @@ export default function DashboardPage() {
             logout_time: cleanLogoutTime,
             is_automation_enabled: data.is_automation_enabled !== undefined ? data.is_automation_enabled : true,
             wfh_reason: data.wfh_reason || 'Work from home',
-            role: data.role || 'user'
+            role: data.role || 'user',
+            wfh_offsets: data.wfh_offsets || {}
           });
 
           if (passwordPresent) {
@@ -2558,6 +2630,165 @@ export default function DashboardPage() {
                     />
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* 4. Schedule Overrides / Offsets Card */}
+            <div className="ui-card" style={{ maxWidth: '100%', padding: '2.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+                <Calendar className="ui-input-icon" style={{ position: 'static', padding: 0, color: 'var(--brand-navy)', width: '20px', height: '20px' }} />
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
+                  Date-Specific Overrides
+                </h3>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                <label className="glass-label">Add Temporary Swap/Override</label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <input
+                    type="date"
+                    value={overrideDate}
+                    onChange={(e) => setOverrideDate(e.target.value)}
+                    style={{
+                      flex: 1,
+                      minWidth: '130px',
+                      padding: '0.55rem 0.95rem',
+                      fontSize: '0.8rem',
+                      borderRadius: '12px',
+                      border: '1px solid var(--input-border)',
+                      color: 'var(--brand-navy)',
+                      outline: 'none',
+                      background: '#ffffff'
+                    }}
+                  />
+                  <select
+                    value={overrideStatus}
+                    onChange={(e) => setOverrideStatus(e.target.value as 'wfh' | 'office')}
+                    style={{
+                      padding: '0.55rem 0.95rem',
+                      fontSize: '0.8rem',
+                      borderRadius: '12px',
+                      border: '1px solid var(--input-border)',
+                      color: 'var(--brand-navy)',
+                      outline: 'none',
+                      background: '#ffffff',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="wfh">🏡 Force WFH</option>
+                    <option value="office">🏢 Force Office</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddOverride}
+                    className="btn-ui-primary"
+                    style={{
+                      padding: '0.55rem 1rem',
+                      fontSize: '0.8rem',
+                      borderRadius: '12px',
+                      width: 'auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Plus style={{ width: '14px', height: '14px' }} />
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              {/* List of active overrides */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
+                <label className="glass-label">Active Overrides</label>
+                {Object.keys(profile.wfh_offsets || {}).length === 0 ? (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '1.5rem',
+                    border: '1px dashed rgba(17, 51, 85, 0.1)',
+                    borderRadius: '16px',
+                    color: 'var(--text-muted)',
+                    fontSize: '0.8rem',
+                    textAlign: 'center'
+                  }}>
+                    No active date-specific overrides.
+                  </div>
+                ) : (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                    maxHeight: '160px',
+                    overflowY: 'auto',
+                    paddingRight: '4px'
+                  }}>
+                    {Object.entries(profile.wfh_offsets || {}).map(([dateStr, status]) => {
+                      // Format date beautifully
+                      let formattedDate = dateStr;
+                      try {
+                        const d = new Date(dateStr);
+                        formattedDate = d.toLocaleDateString('en-US', {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric'
+                        });
+                      } catch (e) {}
+
+                      return (
+                        <div
+                          key={dateStr}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.5rem 0.75rem',
+                            background: 'rgba(17, 51, 85, 0.02)',
+                            border: '1px solid rgba(17, 51, 85, 0.06)',
+                            borderRadius: '12px',
+                            gap: '0.5rem'
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--brand-navy)' }}>
+                              {formattedDate}
+                            </span>
+                            <span style={{
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              color: status === 'wfh' ? '#16a34a' : 'var(--accent-blue)',
+                              marginTop: '2px'
+                            }}>
+                              {status === 'wfh' ? '🏡 WFH Override' : '🏢 Office Override'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOverride(dateStr)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#ef4444',
+                              cursor: 'pointer',
+                              padding: '0.25rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              opacity: 0.8,
+                              transition: 'opacity 0.2s'
+                            }}
+                            title="Remove override"
+                          >
+                            <Trash2 style={{ width: '14px', height: '14px' }} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
