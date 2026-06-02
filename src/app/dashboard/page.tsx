@@ -2505,6 +2505,8 @@ export default function DashboardPage() {
                     readOnly={isLocked}
                     required
                     style={{
+                      borderRadius: '14px',
+                      paddingLeft: '2.75rem',
                       cursor: isLocked ? 'not-allowed' : 'text'
                     }}
                   />
@@ -2531,6 +2533,8 @@ export default function DashboardPage() {
                     className="ui-input"
                     readOnly={isLocked}
                     style={{ 
+                      borderRadius: '14px',
+                      paddingLeft: '2.75rem',
                       paddingRight: '2.5rem',
                       cursor: isLocked ? 'not-allowed' : 'text'
                     }}
@@ -2579,9 +2583,9 @@ export default function DashboardPage() {
                         onClick={() => handleWfhDayToggle(day)}
                         className={`custom-checkbox ${isSelected ? 'selected' : ''}`}
                         style={{
-                          padding: '0.55rem 0.95rem',
+                          padding: '0.6rem 1.1rem',
                           fontSize: '0.8rem',
-                          borderRadius: '999px',
+                          borderRadius: '12px',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '4px',
@@ -2612,7 +2616,10 @@ export default function DashboardPage() {
                     value={profile.wfh_reason}
                     onChange={(e) => setProfile({ ...profile, wfh_reason: e.target.value })}
                     className="ui-input"
-                    style={{ paddingLeft: '1.25rem' }}
+                    style={{
+                      borderRadius: '14px',
+                      paddingLeft: '1.25rem'
+                    }}
                     required
                   />
                 </div>
@@ -2630,6 +2637,11 @@ export default function DashboardPage() {
                       value={profile.login_time}
                       onChange={(e) => setProfile({ ...profile, login_time: e.target.value })}
                       className="ui-input"
+                      style={{
+                        borderRadius: '14px',
+                        paddingLeft: '2.75rem',
+                        paddingRight: '1rem'
+                      }}
                       required
                     />
                   </div>
@@ -2645,6 +2657,11 @@ export default function DashboardPage() {
                       value={profile.logout_time}
                       onChange={(e) => setProfile({ ...profile, logout_time: e.target.value })}
                       className="ui-input"
+                      style={{
+                        borderRadius: '14px',
+                        paddingLeft: '2.75rem',
+                        paddingRight: '1rem'
+                      }}
                       required
                     />
                   </div>
