@@ -270,7 +270,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
     console.log(`Found ${profiles.length} active automation profiles. Evaluating schedules...`);
 
     // 2. Launch browser (Remote CDP on Vercel if URL is provided, otherwise local headless Chromium)
-    const remoteUrl = process.env.PLAYWRIGHT_SERVICE_URL;
+    const remoteUrl = process.env.NODE_ENV === 'development' ? null : process.env.PLAYWRIGHT_SERVICE_URL;
     
     // Test browserless reachability
     try {

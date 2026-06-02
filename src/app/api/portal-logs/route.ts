@@ -40,8 +40,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to decrypt credentials.' }, { status: 500 });
     }
 
-    // 3. Connect to Browserless or local browser
-    const remoteUrl = process.env.PLAYWRIGHT_SERVICE_URL;
+    // 3. Connect to Browserless or local browser (Bypass remote service in local development to avoid IP block/geo-restrictions on corporate portal)
+    const remoteUrl = process.env.NODE_ENV === 'development' ? null : process.env.PLAYWRIGHT_SERVICE_URL;
     let playwright;
     try {
       playwright = await import('playwright-core');
