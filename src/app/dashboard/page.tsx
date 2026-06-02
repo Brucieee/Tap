@@ -22,7 +22,8 @@ import {
   EyeOff,
   Megaphone,
   Trash2,
-  Plus
+  Plus,
+  RefreshCw
 } from 'lucide-react';
 import Logo from '@/components/Logo';
 import BatEffect from '@/components/effects/BatEffect';
@@ -163,6 +164,7 @@ export default function DashboardPage() {
   const [isLocked, setIsLocked] = useState(true);
   const [triggerBatEffect, setTriggerBatEffect] = useState(false);
   const [triggeringManualLog, setTriggeringManualLog] = useState<'login' | 'logout' | null>(null);
+  const [manualDate, setManualDate] = useState('');
   const [adminStats, setAdminStats] = useState({ todayLogins: 0, todayLogouts: 0, activeAutomatedUsers: 0 });
   
   // Real-time Virtual Terminal Logging
@@ -175,8 +177,36 @@ export default function DashboardPage() {
   const [holidays, setHolidays] = useState<any[]>([]);
   const [loadingStandly, setLoadingStandly] = useState(true);
 
+  // Portal Log History Integration State
+  const [portalLogs, setPortalLogs] = useState<any[]>([]);
+  const [loadingPortalLogs, setLoadingPortalLogs] = useState(false);
+  const [syncError, setSyncError] = useState('');
+
   const router = useRouter();
   const supabase = createClient();
+
+  const handleSyncPortalLogs = async () => {
+    setLoadingPortalLogs(true);
+    setSyncError('');
+    try {
+      const response = await fetch('/api/portal-logs');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setPortalLogs(data.logs || []);
+        } else {
+          setSyncError(data.error || 'Failed to sync portal logs.');
+        }
+      } else {
+        const err = await response.json();
+        setSyncError(err.error || 'Failed to sync portal logs.');
+      }
+    } catch (err: any) {
+      setSyncError(err.message || 'An unexpected error occurred.');
+    } finally {
+      setLoadingPortalLogs(false);
+    }
+  };
 
   useEffect(() => {
     const initDashboard = async () => {
@@ -215,6 +245,10 @@ export default function DashboardPage() {
             wfh_reason: data.wfh_reason || 'Work from home',
             role: data.role || 'user'
           });
+
+          if (passwordPresent) {
+            handleSyncPortalLogs();
+          }
         }
       } catch (error) {
         console.error('Failed to load profile settings:', error);
@@ -430,7 +464,16 @@ export default function DashboardPage() {
     // Set triggering source and start terminal
     setConsoleTriggerSource('user');
     
-    const displayDate = new Date().toLocaleDateString();
+    let customDateQuery = '';
+    let displayDate = new Date().toLocaleDateString();
+    
+    if (manualDate) {
+      const parsedDate = new Date(manualDate);
+      const dayOfWeek = parsedDate.toLocaleDateString('en-US', { weekday: 'long' });
+      customDateQuery = `&date=${manualDate}&day=${dayOfWeek}`;
+      displayDate = parsedDate.toLocaleDateString();
+    }
+    
     setActiveConsoleLogs([{ 
       status: 'info', 
       message: `Initializing manual ${mode} override sequence on date: ${displayDate}...` 
@@ -438,8 +481,7 @@ export default function DashboardPage() {
     setShowConsole(true);
     
     try {
-      let url = `/api/cron/run-timelog?mode=${mode}&test=true&stream=true`;
-      
+      let url = `/api/cron/run-timelog?mode=${mode}&test=true&stream=true${customDateQuery}`;
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP network error! Status: ${response.status}`);
@@ -736,6 +778,48 @@ export default function DashboardPage() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+                {/* Custom Date Picker for Manual Trigger */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date:</span>
+                  <input
+                    type="date"
+                    value={manualDate}
+                    onChange={(e) => setManualDate(e.target.value)}
+                    style={{
+                      padding: '0.4rem 0.75rem',
+                      fontSize: '0.75rem',
+                      borderRadius: '999px',
+                      border: '1px solid #cbd5e1',
+                      color: 'var(--brand-navy)',
+                      outline: 'none',
+                      background: '#ffffff',
+                      fontFamily: 'inherit',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  />
+                  {manualDate && (
+                    <button
+                      type="button"
+                      onClick={() => setManualDate('')}
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        border: 'none',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        borderRadius: '999px',
+                        padding: '0.2rem 0.5rem'
+                      }}
+                      title="Clear custom date"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
                 {/* Manual Trigger Buttons */}
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
@@ -1426,6 +1510,123 @@ export default function DashboardPage() {
                 </div>
               );
             })()}
+          </div>
+
+
+
+          {/* Cocogen Portal Log History Panel */}
+          <div className="ui-card" style={{
+            maxWidth: '100%',
+            padding: '2.25rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.5rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Calendar style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
+                  Cocogen Portal Log History
+                </h3>
+              </div>
+              <button 
+                type="button"
+                onClick={handleSyncPortalLogs}
+                disabled={loadingPortalLogs || !hasPasswordStored}
+                className="btn-ui-secondary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.45rem 1rem',
+                  fontSize: '0.8rem',
+                  borderRadius: '999px',
+                  cursor: !hasPasswordStored ? 'not-allowed' : 'pointer',
+                  opacity: !hasPasswordStored ? 0.5 : 1
+                }}
+              >
+                {loadingPortalLogs ? (
+                  <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1.5s linear infinite' }} />
+                ) : (
+                  <RefreshCw style={{ width: '14px', height: '14px' }} />
+                )}
+                {loadingPortalLogs ? 'Syncing...' : 'Sync Portal'}
+              </button>
+            </div>
+
+            {!hasPasswordStored ? (
+              <div style={{ padding: '1rem', border: '1px dashed #e2e8f0', borderRadius: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                🔑 Please enter and save your corporate portal credentials in the settings below to synchronize your account logs.
+              </div>
+            ) : loadingPortalLogs ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', gap: '10px' }}>
+                <Loader2 className="animate-spin" style={{ width: '24px', height: '24px', color: 'var(--accent-blue)', animation: 'spin 1.5s linear infinite' }} />
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 550, textAlign: 'center' }}>
+                  Logging into timelog.cocogen.com.ph & extracting recent history...<br />
+                  <span style={{ fontSize: '0.7rem', fontWeight: 400 }}>(This process takes about 10-15 seconds)</span>
+                </span>
+              </div>
+            ) : syncError ? (
+              <div style={{ padding: '0.75rem 1rem', backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '12px', color: '#b91c1c', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertCircle style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                <span>{syncError}</span>
+              </div>
+            ) : portalLogs.length === 0 ? (
+              <div style={{ padding: '1rem', border: '1px dashed #e2e8f0', borderRadius: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                📅 No portal logs found yet. Click the "Sync Portal" button above to pull recent log history.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Date</th>
+                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Time</th>
+                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Mode</th>
+                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {portalLogs.map((log, index) => {
+                      const isTimeIn = log.mode.toLowerCase().includes('in');
+                      const isApproved = log.status.toLowerCase().includes('approved') || log.status.toLowerCase().includes('active');
+                      
+                      return (
+                        <tr key={index} style={{ borderBottom: index === portalLogs.length - 1 ? 'none' : '1px solid #f1f5f9', backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa' }}>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{log.date}</td>
+                          <td style={{ padding: '0.75rem 1rem', color: '#475569', fontWeight: 500 }}>{log.time}</td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <span style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              backgroundColor: isTimeIn ? '#ecfdf5' : '#eff6ff',
+                              color: isTimeIn ? '#059669' : '#2563eb',
+                              textTransform: 'uppercase'
+                            }}>
+                              {log.mode}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <span style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              backgroundColor: isApproved ? '#e0f2fe' : '#fef3c7',
+                              color: isApproved ? '#0369a1' : '#d97706'
+                            }}>
+                              {log.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
 
