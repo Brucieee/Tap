@@ -854,10 +854,12 @@ export default function DashboardPage() {
                   setMessage({ text: `Successfully triggered ${mode === 'login' ? 'Log In' : 'Log Out'}!`, type: 'success' });
                   addToast(`Manual ${modeText} Succeeded`, `Successfully manually timed ${mode === 'login' ? 'In' : 'Out'} for ${displayDate}!`, displayDate, 'success');
                   setActiveConsoleLogs(prev => [...prev, { status: 'success', message: `Manual trigger finished successfully. Mode: ${modeText}` }]);
+                  handleSyncPortalLogs();
                 } else if (myResult && myResult.status === 'skipped') {
                   setMessage({ text: myResult.message || `Skipped manual ${mode}.`, type: 'success' });
                   addToast(`Manual ${modeText} Skipped`, myResult.message || `Skipped manual time ${mode === 'login' ? 'In' : 'Out'}.`, displayDate, 'info');
                   setActiveConsoleLogs(prev => [...prev, { status: 'warn', message: myResult.message || `Manual run skipped.` }]);
+                  handleSyncPortalLogs();
                 } else {
                   const errorMsg = myResult?.message || finalData.error || 'Unknown error';
                   setMessage({ text: `Failed to trigger ${mode}: ${errorMsg}`, type: 'error' });
