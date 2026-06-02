@@ -307,7 +307,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       }
 
       console.log(`Connecting to remote Playwright browser service...`);
-      const maxConnRetries = 3;
+      const maxConnRetries = 12; // Wait up to 30 seconds for concurrent slots to open up
       let connAttempt = 0;
       let connSuccess = false;
       
@@ -315,8 +315,8 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
         connAttempt++;
         try {
           if (connAttempt > 1) {
-            const backoffMs = connAttempt === 2 ? 3000 : 8000;
-            console.log(`[Browser Connection Retry ${connAttempt}/${maxConnRetries}] Sleeping for ${backoffMs}ms before retrying remote browser connection...`);
+            const backoffMs = 2500;
+            console.log(`[Browser Queue] Slot occupied. Attempt ${connAttempt}/${maxConnRetries}: Retrying remote connection in ${backoffMs}ms...`);
             await new Promise(resolve => setTimeout(resolve, backoffMs));
           }
 

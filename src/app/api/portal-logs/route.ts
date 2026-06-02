@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
       }
 
       console.log('Connecting to remote Playwright service for scraper...');
-      const maxConnRetries = 3;
+      const maxConnRetries = 12; // Wait up to 30 seconds for concurrent slots to open up
       let connAttempt = 0;
       let connSuccess = false;
       
@@ -73,8 +73,8 @@ export async function GET(request: NextRequest) {
         connAttempt++;
         try {
           if (connAttempt > 1) {
-            const backoffMs = connAttempt === 2 ? 3000 : 8000;
-            console.log(`[Scraper Browser Connection Retry ${connAttempt}/${maxConnRetries}] Sleeping for ${backoffMs}ms before retrying remote browser connection...`);
+            const backoffMs = 2500;
+            console.log(`[Scraper Browser Queue] Slot occupied. Attempt ${connAttempt}/${maxConnRetries}: Retrying remote connection in ${backoffMs}ms...`);
             await new Promise(resolve => setTimeout(resolve, backoffMs));
           }
 
