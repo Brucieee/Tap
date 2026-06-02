@@ -183,7 +183,7 @@ export default function DashboardPage() {
   const [syncError, setSyncError] = useState('');
   const [portalLogsViewMode, setPortalLogsViewMode] = useState<'calendar' | 'list'>('calendar');
   const [calendarMonthOffset, setCalendarMonthOffset] = useState<number>(0);
-  const [recoveryStatus, setRecoveryStatus] = useState<{ date: string; state: 'running' | 'success' | 'failed' } | null>(null);
+  const [recoveryStatus, setRecoveryStatus] = useState<{ date: string; modeLabel: string; state: 'running' | 'success' | 'failed' } | null>(null);
   const attemptedRecoveriesRef = useRef<Set<string>>(new Set());
   const [toasts, setToasts] = useState<Array<{ id: string; title: string; message: string; date: string; type: 'info' | 'success' | 'failed' }>>([]);
   const [isAdminWorkspaceExpanded, setIsAdminWorkspaceExpanded] = useState<boolean>(false);
@@ -280,25 +280,25 @@ export default function DashboardPage() {
       const apiMode = targetMode === 'login' ? 'login' : 'logout';
       
       console.log(`[Auto-Recovery] Triggering ${modeLabel} auto-recovery for missed workday: ${targetDate}`);
-      setRecoveryStatus({ date: targetDate, state: 'running' });
+      setRecoveryStatus({ date: targetDate, modeLabel, state: 'running' });
       addToast(`${modeLabel} Recovery Active`, `Detected missing ${modeLabel} for workday ${targetDate}. Running self-healing auto-recovery...`, targetDate, 'info');
       
       try {
         const res = await fetch(`/api/cron/run-timelog?mode=${apiMode}&date=${targetDate}`);
         if (res.ok) {
           const data = await res.json();
-          setRecoveryStatus({ date: targetDate, state: 'success' });
+          setRecoveryStatus({ date: targetDate, modeLabel, state: 'success' });
           addToast(`${modeLabel} Recovered`, `Successfully recovered missed ${modeLabel} for workday ${targetDate}!`, targetDate, 'success');
           console.log(`[Auto-Recovery] ${modeLabel} recovered successfully:`, data);
           // Re-sync logs from portal to instantly reflect the new entry on dashboard
           handleSyncPortalLogs();
         } else {
-          setRecoveryStatus({ date: targetDate, state: 'failed' });
+          setRecoveryStatus({ date: targetDate, modeLabel, state: 'failed' });
           addToast(`${modeLabel} Recovery Failed`, `Failed to auto-recover missed ${modeLabel} for workday ${targetDate}.`, targetDate, 'failed');
           console.error(`[Auto-Recovery] Failed to recover missed ${modeLabel}.`);
         }
       } catch (err) {
-        setRecoveryStatus({ date: targetDate, state: 'failed' });
+        setRecoveryStatus({ date: targetDate, modeLabel, state: 'failed' });
         addToast(`${modeLabel} Recovery Failed`, `Failed to auto-recover missed ${modeLabel} for workday ${targetDate}.`, targetDate, 'failed');
         console.error(`[Auto-Recovery] Error during auto-recovery execution:`, err);
       } finally {
@@ -307,15 +307,21 @@ export default function DashboardPage() {
     }
   };
 
-  const handleSyncPortalLogs = async (currentWfhDays?: string[], isAutomationEnabled?: boolean) => {
+  const handleSyncPortalLogs = async (currentWfhDays?: string[], isAutomationEnabled?: boolean, attempt = 1) => {
     setLoadingPortalLogs(true);
-    setSyncError('');
+    setSyncError(attempt > 1 ? `Retrying portal sync (Attempt ${attempt}/3)...` : '');
+    
     try {
       const response = await fetch('/api/portal-logs');
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.logs) {
           setPortalLogs(data.logs);
+          setSyncError('');
+          
+          if (attempt > 1) {
+            addToast('Sync Succeeded', `Successfully connected and synced logs after ${attempt} attempts!`, 'sync', 'success');
+          }
           
           // Auto-focus calendar on the most recent log's month!
           if (data.logs.length > 0) {
@@ -342,17 +348,30 @@ export default function DashboardPage() {
           const activeWfhDays = currentWfhDays || profile.wfh_days;
           const automationEnabled = isAutomationEnabled !== undefined ? isAutomationEnabled : profile.is_automation_enabled;
           checkAndRecoverMissedTimeouts(data.logs, activeWfhDays, automationEnabled);
+          setLoadingPortalLogs(false);
+          return;
         } else {
-          setSyncError(data.error || 'Failed to sync portal logs.');
+          throw new Error(data.error || 'Failed to sync portal logs.');
         }
       } else {
-        const err = await response.json();
-        setSyncError(err.error || 'Failed to sync portal logs.');
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to sync portal logs.');
       }
     } catch (err: any) {
-      setSyncError(err.message || 'An unexpected error occurred.');
-    } finally {
-      setLoadingPortalLogs(false);
+      console.error(`Sync attempt ${attempt} failed:`, err.message);
+      
+      if (attempt < 3) {
+        setSyncError(`Sync attempt ${attempt} failed. Retrying (Attempt ${attempt + 1}/3)...`);
+        addToast('Sync Retry Active', `Connection failed. Retrying portal sync (Attempt ${attempt + 1}/3)...`, 'sync', 'info');
+        
+        // Wait 4 seconds before next attempt
+        await new Promise(resolve => setTimeout(resolve, 4000));
+        await handleSyncPortalLogs(currentWfhDays, isAutomationEnabled, attempt + 1);
+      } else {
+        setSyncError(err.message || 'Failed to sync portal logs after 3 attempts.');
+        addToast('Sync Failed', `Connection failed after 3 attempts: ${err.message || 'Portal unreachable'}`, 'sync', 'failed');
+        setLoadingPortalLogs(false);
+      }
     }
   };
 
@@ -1898,9 +1917,9 @@ export default function DashboardPage() {
                         <span style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>⚠</span>
                       )}
                       <span>
-                        {recoveryStatus.state === 'running' && `Auto-running missed Time Out recovery for workday ${recoveryStatus.date}...`}
-                        {recoveryStatus.state === 'success' && `Successfully recovered missed Time Out for workday ${recoveryStatus.date}!`}
-                        {recoveryStatus.state === 'failed' && `Failed to auto-recover missed Time Out for workday ${recoveryStatus.date}.`}
+                        {recoveryStatus.state === 'running' && `Auto-running missed ${recoveryStatus.modeLabel} recovery for workday ${recoveryStatus.date}...`}
+                        {recoveryStatus.state === 'success' && `Successfully recovered missed ${recoveryStatus.modeLabel} for workday ${recoveryStatus.date}!`}
+                        {recoveryStatus.state === 'failed' && `Failed to auto-recover missed ${recoveryStatus.modeLabel} for workday ${recoveryStatus.date}.`}
                       </span>
                     </div>
                   </div>
