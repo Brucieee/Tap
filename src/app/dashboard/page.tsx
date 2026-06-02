@@ -185,12 +185,12 @@ export default function DashboardPage() {
   const [calendarMonthOffset, setCalendarMonthOffset] = useState<number>(0);
   const [recoveryStatus, setRecoveryStatus] = useState<{ date: string; state: 'running' | 'success' | 'failed' } | null>(null);
   const attemptedRecoveriesRef = useRef<Set<string>>(new Set());
-  const [toasts, setToasts] = useState<Array<{ id: string; message: string; date: string; type: 'info' | 'success' | 'failed' }>>([]);
+  const [toasts, setToasts] = useState<Array<{ id: string; title: string; message: string; date: string; type: 'info' | 'success' | 'failed' }>>([]);
   const [isAdminWorkspaceExpanded, setIsAdminWorkspaceExpanded] = useState<boolean>(false);
 
-  const addToast = (message: string, date: string, type: 'info' | 'success' | 'failed') => {
+  const addToast = (title: string, message: string, date: string, type: 'info' | 'success' | 'failed') => {
     const id = Math.random().toString(36).substring(2, 9);
-    setToasts(prev => [...prev, { id, message, date, type }]);
+    setToasts(prev => [...prev, { id, title, message, date, type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 6000);
@@ -281,25 +281,25 @@ export default function DashboardPage() {
       
       console.log(`[Auto-Recovery] Triggering ${modeLabel} auto-recovery for missed workday: ${targetDate}`);
       setRecoveryStatus({ date: targetDate, state: 'running' });
-      addToast(`Detected missing ${modeLabel} for workday ${targetDate}. Running self-healing auto-recovery...`, targetDate, 'info');
+      addToast(`${modeLabel} Recovery Active`, `Detected missing ${modeLabel} for workday ${targetDate}. Running self-healing auto-recovery...`, targetDate, 'info');
       
       try {
         const res = await fetch(`/api/cron/run-timelog?mode=${apiMode}&date=${targetDate}`);
         if (res.ok) {
           const data = await res.json();
           setRecoveryStatus({ date: targetDate, state: 'success' });
-          addToast(`Successfully recovered missed ${modeLabel} for workday ${targetDate}!`, targetDate, 'success');
+          addToast(`${modeLabel} Recovered`, `Successfully recovered missed ${modeLabel} for workday ${targetDate}!`, targetDate, 'success');
           console.log(`[Auto-Recovery] ${modeLabel} recovered successfully:`, data);
           // Re-sync logs from portal to instantly reflect the new entry on dashboard
           handleSyncPortalLogs();
         } else {
           setRecoveryStatus({ date: targetDate, state: 'failed' });
-          addToast(`Failed to auto-recover missed ${modeLabel} for workday ${targetDate}.`, targetDate, 'failed');
+          addToast(`${modeLabel} Recovery Failed`, `Failed to auto-recover missed ${modeLabel} for workday ${targetDate}.`, targetDate, 'failed');
           console.error(`[Auto-Recovery] Failed to recover missed ${modeLabel}.`);
         }
       } catch (err) {
         setRecoveryStatus({ date: targetDate, state: 'failed' });
-        addToast(`Failed to auto-recover missed ${modeLabel} for workday ${targetDate}.`, targetDate, 'failed');
+        addToast(`${modeLabel} Recovery Failed`, `Failed to auto-recover missed ${modeLabel} for workday ${targetDate}.`, targetDate, 'failed');
         console.error(`[Auto-Recovery] Error during auto-recovery execution:`, err);
       } finally {
         setTimeout(() => setRecoveryStatus(null), 5000);
@@ -622,7 +622,7 @@ export default function DashboardPage() {
       displayDate = parsedDate.toLocaleDateString();
     }
     
-    addToast(`Manually triggering time ${mode === 'login' ? 'In' : 'Out'} for ${displayDate}...`, displayDate, 'info');
+    addToast(`Manual ${modeText} Triggered`, `Manually triggering time ${mode === 'login' ? 'In' : 'Out'} for ${displayDate}...`, displayDate, 'info');
     
     setActiveConsoleLogs([{ 
       status: 'info', 
@@ -668,16 +668,16 @@ export default function DashboardPage() {
                 
                 if (myResult && myResult.status === 'success') {
                   setMessage({ text: `Successfully triggered ${mode === 'login' ? 'Log In' : 'Log Out'}!`, type: 'success' });
-                  addToast(`Successfully manually timed ${mode === 'login' ? 'In' : 'Out'} for ${displayDate}!`, displayDate, 'success');
+                  addToast(`Manual ${modeText} Succeeded`, `Successfully manually timed ${mode === 'login' ? 'In' : 'Out'} for ${displayDate}!`, displayDate, 'success');
                   setActiveConsoleLogs(prev => [...prev, { status: 'success', message: `Manual trigger finished successfully. Mode: ${modeText}` }]);
                 } else if (myResult && myResult.status === 'skipped') {
                   setMessage({ text: myResult.message || `Skipped manual ${mode}.`, type: 'success' });
-                  addToast(myResult.message || `Skipped manual time ${mode === 'login' ? 'In' : 'Out'}.`, displayDate, 'info');
+                  addToast(`Manual ${modeText} Skipped`, myResult.message || `Skipped manual time ${mode === 'login' ? 'In' : 'Out'}.`, displayDate, 'info');
                   setActiveConsoleLogs(prev => [...prev, { status: 'warn', message: myResult.message || `Manual run skipped.` }]);
                 } else {
                   const errorMsg = myResult?.message || finalData.error || 'Unknown error';
                   setMessage({ text: `Failed to trigger ${mode}: ${errorMsg}`, type: 'error' });
-                  addToast(`Failed manual time ${mode === 'login' ? 'In' : 'Out'}: ${errorMsg}`, displayDate, 'failed');
+                  addToast(`Manual ${modeText} Failed`, `Failed manual time ${mode === 'login' ? 'In' : 'Out'}: ${errorMsg}`, displayDate, 'failed');
                   setActiveConsoleLogs(prev => [...prev, { status: 'error', message: `Execution failed: ${errorMsg}` }]);
                 }
               } else {
@@ -691,7 +691,7 @@ export default function DashboardPage() {
       }
     } catch (err: any) {
       setMessage({ text: `Execution error: ${err.message}`, type: 'error' });
-      addToast(`Execution error: ${err.message}`, displayDate, 'failed');
+      addToast(`Execution Error`, `Execution error: ${err.message}`, displayDate, 'failed');
       setActiveConsoleLogs(prev => [...prev, { status: 'error', message: `Fatal execution error: ${err.message}` }]);
     } finally {
       setTriggeringManualLog(null);
@@ -805,7 +805,7 @@ export default function DashboardPage() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 750 }}>
-                  {toast.type === 'success' ? 'Task Completed' : toast.type === 'failed' ? 'Task Failed' : 'Automation Active'}
+                  {toast.title}
                 </span>
                 <span style={{ fontSize: '0.75rem', lineHeight: '1.4', opacity: 0.9, fontWeight: 500 }}>
                   {toast.message}
