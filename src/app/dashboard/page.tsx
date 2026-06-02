@@ -183,9 +183,93 @@ export default function DashboardPage() {
   const [syncError, setSyncError] = useState('');
   const [portalLogsViewMode, setPortalLogsViewMode] = useState<'calendar' | 'list'>('calendar');
   const [calendarMonthOffset, setCalendarMonthOffset] = useState<number>(0);
+  const [recoveryStatus, setRecoveryStatus] = useState<{ date: string; state: 'running' | 'success' | 'failed' } | null>(null);
+  const attemptedRecoveriesRef = useRef<Set<string>>(new Set());
 
   const router = useRouter();
   const supabase = createClient();
+
+  const checkAndRecoverMissedTimeouts = async (logs: any[]) => {
+    // 1. Group logs by date using robust ISO formatting
+    const getLogDateKeyLocal = (logDateStr: string) => {
+      try {
+        const cleaned = logDateStr.trim();
+        const datePart = cleaned.includes(' ') ? cleaned.split(/\s+/)[0] : cleaned;
+        const [m, d, y] = datePart.split('/');
+        const cleanY = y.trim();
+        const cleanM = m.trim();
+        const cleanD = d.trim();
+        const yearStr = cleanY.length === 2 ? `20${cleanY}` : cleanY;
+        const monthStr = cleanM.padStart(2, '0');
+        const dayStr = cleanD.padStart(2, '0');
+        return `${yearStr}-${monthStr}-${dayStr}`;
+      } catch {
+        return '';
+      }
+    };
+
+    const logsMap: Record<string, any[]> = {};
+    logs.forEach(log => {
+      const key = getLogDateKeyLocal(log.date);
+      if (key) {
+        if (!logsMap[key]) logsMap[key] = [];
+        logsMap[key].push(log);
+      }
+    });
+
+    // 2. Loop through the last 7 calendar days (excluding today)
+    const today = new Date();
+    const missedDatesToRecover: string[] = [];
+
+    for (let i = 1; i <= 7; i++) {
+      const pastDate = new Date();
+      pastDate.setDate(today.getDate() - i);
+      
+      const dayOfWeek = pastDate.getDay(); // 0 = Sunday, 6 = Saturday
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Skip weekends
+
+      // Format as YYYY-MM-DD for map check
+      const yearStr = pastDate.getFullYear();
+      const monthStr = (pastDate.getMonth() + 1).toString().padStart(2, '0');
+      const dayStr = pastDate.getDate().toString().padStart(2, '0');
+      const dateKey = `${yearStr}-${monthStr}-${dayStr}`;
+
+      const dayEntries = logsMap[dateKey] || [];
+      const hasTimeIn = dayEntries.some(log => log.mode.toLowerCase().includes('in'));
+      const hasTimeOut = dayEntries.some(log => log.mode.toLowerCase().includes('out'));
+
+      if (hasTimeIn && !hasTimeOut && !attemptedRecoveriesRef.current.has(dateKey)) {
+        // Found a missed timeout! Add to queue and mark as attempted to prevent recursion loops
+        attemptedRecoveriesRef.current.add(dateKey);
+        missedDatesToRecover.push(dateKey);
+      }
+    }
+
+    if (missedDatesToRecover.length > 0) {
+      const targetDate = missedDatesToRecover[0]; // Recover the most recent one first
+      console.log(`[Auto-Recovery] Triggering Time Out auto-recovery for missed workday: ${targetDate}`);
+      setRecoveryStatus({ date: targetDate, state: 'running' });
+      
+      try {
+        const res = await fetch(`/api/cron/run-timelog?mode=logout&date=${targetDate}`);
+        if (res.ok) {
+          const data = await res.json();
+          setRecoveryStatus({ date: targetDate, state: 'success' });
+          console.log('[Auto-Recovery] Timeout recovered successfully:', data);
+          // Re-sync logs from portal to instantly reflect the new Time Out on dashboard
+          handleSyncPortalLogs();
+        } else {
+          setRecoveryStatus({ date: targetDate, state: 'failed' });
+          console.error('[Auto-Recovery] Failed to recover missed Time Out.');
+        }
+      } catch (err) {
+        setRecoveryStatus({ date: targetDate, state: 'failed' });
+        console.error('[Auto-Recovery] Error during auto-recovery execution:', err);
+      } finally {
+        setTimeout(() => setRecoveryStatus(null), 5000);
+      }
+    }
+  };
 
   const handleSyncPortalLogs = async () => {
     setLoadingPortalLogs(true);
@@ -200,11 +284,11 @@ export default function DashboardPage() {
           // Auto-focus calendar on the most recent log's month!
           if (data.logs.length > 0) {
             try {
-              const mostRecentLog = data.logs[0]; // Usually first log is the most recent
+              const mostRecentLog = data.logs[0];
               const cleanedDate = mostRecentLog.date.trim();
               const [m, d, y] = cleanedDate.split('/');
               const logYear = parseInt(y.trim().length === 2 ? `20${y.trim()}` : y.trim(), 10);
-              const logMonth = parseInt(m.trim(), 10) - 1; // 0-indexed
+              const logMonth = parseInt(m.trim(), 10) - 1;
               
               const currentDateObj = new Date();
               const currentYear = currentDateObj.getFullYear();
@@ -217,6 +301,9 @@ export default function DashboardPage() {
               console.error('Failed to auto-focus calendar month:', focusErr);
             }
           }
+
+          // Trigger missed log auto-recovery!
+          checkAndRecoverMissedTimeouts(data.logs);
         } else {
           setSyncError(data.error || 'Failed to sync portal logs.');
         }
@@ -1594,7 +1681,53 @@ export default function DashboardPage() {
                 <AlertCircle style={{ width: '16px', height: '16px', flexShrink: 0 }} />
                 <span>{syncError}</span>
               </div>
-            ) : (() => {
+            ) : (
+              <>
+                {recoveryStatus && (
+                  <div style={{
+                    margin: '0 0 1rem 0',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    backgroundColor: recoveryStatus.state === 'running' 
+                      ? '#eff6ff' 
+                      : recoveryStatus.state === 'success' 
+                        ? '#f0fdf4' 
+                        : '#fef2f2',
+                    border: '1px solid',
+                    borderColor: recoveryStatus.state === 'running' 
+                      ? '#bfdbfe' 
+                      : recoveryStatus.state === 'success' 
+                        ? '#bbf7d0' 
+                        : '#fca5a5',
+                    color: recoveryStatus.state === 'running' 
+                      ? '#1d4ed8' 
+                      : recoveryStatus.state === 'success' 
+                        ? '#166534' 
+                        : '#991b1b',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {recoveryStatus.state === 'running' ? (
+                        <Loader2 className="animate-spin" style={{ width: '14px', height: '14px', animation: 'spin 1.5s linear infinite' }} />
+                      ) : recoveryStatus.state === 'success' ? (
+                        <span style={{ fontSize: '1rem', fontWeight: 'bold' }}>✓</span>
+                      ) : (
+                        <span style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>⚠</span>
+                      )}
+                      <span>
+                        {recoveryStatus.state === 'running' && `Auto-running missed Time Out recovery for workday ${recoveryStatus.date}...`}
+                        {recoveryStatus.state === 'success' && `Successfully recovered missed Time Out for workday ${recoveryStatus.date}!`}
+                        {recoveryStatus.state === 'failed' && `Failed to auto-recover missed Time Out for workday ${recoveryStatus.date}.`}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {(() => {
               // Group logs by date with robust whitespace trimming and time isolation
               const getLogDateKey = (logDateStr: string) => {
                 try {
@@ -1929,6 +2062,8 @@ export default function DashboardPage() {
                 </div>
               );
             })()}
+          </>
+        )}
           </div>
 
 
