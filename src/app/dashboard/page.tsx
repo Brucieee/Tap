@@ -32,9 +32,17 @@ const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 // Elegant retro-futuristic dark terminal console to show live automation updates
 const TerminalConsole = ({ logs, onClose }: { logs: Array<{ status: string; message: string }>; onClose: () => void }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef<boolean>(true);
+
+  const handleScroll = () => {
+    if (!containerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    // Allow a 30px buffer to determine if user is at the bottom
+    isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 30;
+  };
 
   useEffect(() => {
-    if (containerRef.current) {
+    if (containerRef.current && isAtBottomRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
   }, [logs]);
@@ -73,6 +81,7 @@ const TerminalConsole = ({ logs, onClose }: { logs: Array<{ status: string; mess
 
       <div 
         ref={containerRef}
+        onScroll={handleScroll}
         style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', scrollbarWidth: 'thin' }}
       >
         {logs.map((log, index) => {
