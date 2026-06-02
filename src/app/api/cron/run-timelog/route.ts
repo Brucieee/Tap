@@ -534,7 +534,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
           // 1. Login Page Execution
           const loginUrl = process.env.COMPANY_PORTAL_LOGIN_URL || 'https://timelog.cocogen.com.ph/Login';
           console.log(`Navigating to login portal: ${loginUrl}`);
-          await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 15000 });
+          await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
           // Fill out credentials
           await page.fill('input[name="ctl00$ContentPlaceHolder1$Login1$UserName"], #ctl00_ContentPlaceHolder1_Login1_UserName', decryptedEmployeeId, { timeout: 10000 });
@@ -544,7 +544,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
           console.log('Submitting credentials form...');
           await Promise.all([
             page.click('input[name="ctl00$ContentPlaceHolder1$Login1$LoginButton"], #ctl00_ContentPlaceHolder1_Login1_LoginButton', { timeout: 10000 }),
-            page.waitForNavigation({ waitUntil: 'networkidle', timeout: 15000 }).catch(() => {
+            page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {
               console.log('Navigation wait timed out or bypassed, continuing flow...');
             })
           ]);

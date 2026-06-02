@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     // 4. Log in to Portal
     const loginUrl = process.env.COMPANY_PORTAL_LOGIN_URL || 'https://timelog.cocogen.com.ph/Login';
     console.log(`Scraper navigating to: ${loginUrl}`);
-    await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 15000 });
+    await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     await page.fill('input[name="ctl00$ContentPlaceHolder1$Login1$UserName"], #ctl00_ContentPlaceHolder1_Login1_UserName', decryptedEmployeeId, { timeout: 10000 });
     await page.fill('input[name="ctl00$ContentPlaceHolder1$Login1$Password"], #ctl00_ContentPlaceHolder1_Login1_Password', decryptedPassword, { timeout: 10000 });
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
     console.log('Submitting credentials form in scraper...');
     await Promise.all([
       page.click('input[name="ctl00$ContentPlaceHolder1$Login1$LoginButton"], #ctl00_ContentPlaceHolder1_Login1_LoginButton', { timeout: 10000 }),
-      page.waitForNavigation({ waitUntil: 'networkidle', timeout: 15000 }).catch(() => {
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {
         console.log('Navigation wait timed out, continuing flow...');
       })
     ]);
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
     const currentUrl = page.url();
     if (!currentUrl.includes('/members/Home') && !currentUrl.includes('Home')) {
       console.log(`Redirecting/Navigating to members home page: ${currentUrl}`);
-      await page.goto('https://timelog.cocogen.com.ph/members/Home', { waitUntil: 'networkidle', timeout: 15000 }).catch(() => {});
+      await page.goto('https://timelog.cocogen.com.ph/members/Home', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
     }
 
     // 5. Scrape all tables on the page
