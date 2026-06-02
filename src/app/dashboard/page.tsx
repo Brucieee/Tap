@@ -1624,6 +1624,14 @@ export default function DashboardPage() {
                     ? trimmed.split(/\s+/).slice(1).join(' ') 
                     : trimmed;
                   
+                  // Convert "8 AM" or "5 PM" to "8:00 AM" or "5:00 PM"
+                  const noMinutesRegex = /^(\d{1,2})\s*([AP]M)$/i;
+                  const noMinMatch = timeOnly.match(noMinutesRegex);
+                  if (noMinMatch) {
+                    const [_, h, ampm] = noMinMatch;
+                    return `${h}:00 ${ampm.toUpperCase()}`;
+                  }
+
                   // If the time has two colons (HH:MM:SS), drop the seconds part
                   const parts = timeOnly.split(':');
                   if (parts.length === 3) {
