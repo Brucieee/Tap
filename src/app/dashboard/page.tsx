@@ -32,36 +32,36 @@ const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 // Elegant retro-futuristic dark terminal console to show live automation updates
 const TerminalConsole = ({ logs, onClose }: { logs: Array<{ status: string; message: string }>; onClose: () => void }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const isAtBottomRef = useRef<boolean>(true);
-
-  const handleScroll = () => {
-    if (!containerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    // Allow a 30px buffer to determine if user is at the bottom
-    isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 30;
-  };
+  const [autoScroll, setAutoScroll] = useState<boolean>(true);
+  const [isHovered, setIsHovered] = useState<boolean>(false);
 
   useEffect(() => {
-    if (containerRef.current && isAtBottomRef.current) {
+    if (containerRef.current && autoScroll && !isHovered) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [logs]);
+  }, [logs, autoScroll, isHovered]);
 
   return (
-    <div style={{
-      background: '#040b14',
-      border: '1px solid #1e293b',
-      borderRadius: '16px',
-      fontFamily: 'Consolas, Monaco, monospace',
-      fontSize: '0.8rem',
-      color: '#34d399',
-      padding: '1.25rem',
-      marginTop: '1.25rem',
-      position: 'relative',
-      boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.6)',
-      width: '100%',
-      animation: 'fadeIn 0.3s ease-out'
-    }}>
+    <div 
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onTouchStart={() => setIsHovered(true)}
+      onTouchEnd={() => setIsHovered(false)}
+      style={{
+        background: '#040b14',
+        border: '1px solid #1e293b',
+        borderRadius: '16px',
+        fontFamily: 'Consolas, Monaco, monospace',
+        fontSize: '0.8rem',
+        color: '#34d399',
+        padding: '1.25rem',
+        marginTop: '1.25rem',
+        position: 'relative',
+        boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.6)',
+        width: '100%',
+        animation: 'fadeIn 0.3s ease-out'
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.6rem', marginBottom: '0.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }}></div>
@@ -69,19 +69,40 @@ const TerminalConsole = ({ logs, onClose }: { logs: Array<{ status: string; mess
           <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></div>
           <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem', marginLeft: '6px', letterSpacing: '0.05em' }}>playwright-agent@tap: ~</span>
         </div>
-        <button 
-          onClick={onClose} 
-          style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '0.85rem', padding: '0 4px', transition: 'color 0.2s' }}
-          onMouseEnter={e => e.currentTarget.style.color = '#ffffff'}
-          onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
-        >
-          ✕
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => setAutoScroll(prev => !prev)}
+            style={{
+              background: autoScroll ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+              border: `1px solid ${autoScroll ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+              borderRadius: '6px',
+              color: autoScroll ? '#34d399' : '#ef4444',
+              fontFamily: 'sans-serif',
+              fontSize: '0.65rem',
+              fontWeight: 700,
+              padding: '2px 8px',
+              cursor: 'pointer',
+              letterSpacing: '0.03em',
+              transition: 'all 0.2s ease-in-out'
+            }}
+          >
+            {autoScroll ? '● AUTO-SCROLL' : '🔒 FREEZE'}
+          </button>
+          <button 
+            type="button"
+            onClick={onClose} 
+            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '0.85rem', padding: '0 4px', transition: 'color 0.2s' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#ffffff'}
+            onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <div 
         ref={containerRef}
-        onScroll={handleScroll}
         style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', scrollbarWidth: 'thin' }}
       >
         {logs.map((log, index) => {
