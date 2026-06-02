@@ -454,7 +454,26 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
         wfhReasonText = `Today (${currentDay}) is not in WFH schedule [${wfhDays.join(', ')}]`;
       }
 
-      if (!isWfhDay && !isManualTest) {
+      let hasManualLoginToday = false;
+      if (modeParam === 'logout') {
+        try {
+          const { data: todayLogin } = await supabase
+            .from('timelog_history')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('date', currentDate)
+            .eq('mode', 'login')
+            .limit(1);
+          if (todayLogin && todayLogin.length > 0) {
+            hasManualLoginToday = true;
+            console.log(`[Profile Evaluation] User ${userId}: Found active morning login in history for today (${currentDate}). Forcing auto-logout execution despite today being an Office day.`);
+          }
+        } catch (err) {
+          console.error(`[Profile Evaluation] User ${userId}: Failed to check login history:`, err);
+        }
+      }
+
+      if (!isWfhDay && !isManualTest && !hasManualLoginToday) {
         console.log(`[Profile Evaluation] User ${userId}: Skipped - ${wfhReasonText}.`);
         results.push({
           userId,
@@ -710,13 +729,20 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
             console.warn(`[Database History Update Exception] Failed to insert history record:`, insertErr.message);
           }
 
+          let successMessage = '';
+          if (matchedEvent && !isExcludedFromEvent) {
+            successMessage = `Successfully submitted timelog ${modeText} for Company Event [${matchedEvent.title}] at ${timeToInject}.`;
+          } else if (hasManualLoginToday) {
+            successMessage = `Successfully submitted automated manual-override timelog ${modeText} due to active morning login at ${timeToInject}.`;
+          } else {
+            successMessage = `Successfully submitted timelog ${modeText} for WFH day (${currentDay}) at ${timeToInject}.`;
+          }
+
           results.push({
             userId,
             employeeId: decryptedEmployeeId,
             status: 'success',
-            message: (matchedEvent && !isExcludedFromEvent)
-              ? `Successfully submitted timelog ${modeText} for Company Event [${matchedEvent.title}] at ${timeToInject}.`
-              : `Successfully submitted timelog ${modeText} for WFH day (${currentDay}) at ${timeToInject}.`
+            message: successMessage
           });
 
           success = true;
