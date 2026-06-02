@@ -12,6 +12,13 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [triggerBatEffect, setTriggerBatEffect] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const sortedLogs = [...logs].sort((a, b) => {
+    const timeA = new Date(a.created_at).getTime();
+    const timeB = new Date(b.created_at).getTime();
+    return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
 
   const router = useRouter();
   const supabase = createClient();
@@ -95,14 +102,40 @@ export default function LogsPage() {
         </div>
 
         <div className="ui-card" style={{ maxWidth: '100%', padding: '2.25rem', display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem', flexShrink: 0 }}>
-            <Clock style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
-              System Logs
-            </h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Clock style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
+                System Logs
+              </h2>
+            </div>
+            
+            {/* Premium Sorting Control */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>Sort by Date:</span>
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
+                style={{
+                  padding: '0.35rem 1.5rem 0.35rem 0.75rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  color: 'var(--brand-navy)',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'border-color 0.2s',
+                }}
+              >
+                <option value="desc">Newest First (Desc)</option>
+                <option value="asc">Oldest First (Asc)</option>
+              </select>
+            </div>
           </div>
 
-          {logs.length === 0 ? (
+          {sortedLogs.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', flex: 1 }}>
               No logs available at the moment.
             </div>
@@ -120,7 +153,7 @@ export default function LogsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {logs.map((log) => (
+                  {sortedLogs.map((log) => (
                     <tr key={log.id} style={{ transition: 'background 0.2s', cursor: 'default' }} onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f1f5f9')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
                       <td style={{ padding: '1rem', color: 'var(--brand-navy)', borderBottom: '1px solid #e2e8f0' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
