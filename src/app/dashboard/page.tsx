@@ -2667,22 +2667,18 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 4. Schedule Offsets & Swaps Card */}
+            {/* 4. Schedule Offsets Card */}
             <div className="ui-card" style={{ maxWidth: '100%', padding: '2.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
                 <Calendar style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
-                  Schedule Offsets & Day Swaps
+                  Schedule Offsets
                 </h3>
               </div>
 
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4', margin: 0 }}>
-                Swap an Office day (so it becomes WFH and logs attendance) with a WFH day (so it becomes Office and skips automated logs).
-              </p>
-
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
-                  <label className="glass-label">Office Date (Swap to WFH)</label>
+                  <label className="glass-label">Office Date (Offset to WFH)</label>
                   <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.4rem' }}>
                     <Calendar className="ui-input-icon" />
                     <input
@@ -2696,7 +2692,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div>
-                  <label className="glass-label">WFH Date (Swap to Office)</label>
+                  <label className="glass-label">WFH Date (Offset to Office)</label>
                   <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.4rem' }}>
                     <Calendar className="ui-input-icon" />
                     <input
@@ -2727,13 +2723,13 @@ export default function DashboardPage() {
                   }}
                 >
                   <Plus style={{ width: '16px', height: '16px' }} />
-                  Add Offset Swap
+                  Add Offset
                 </button>
               </div>
 
-              {/* List of active offset swaps */}
+              {/* List of active offsets */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
-                <label className="glass-label">Active Offset Swaps</label>
+                <label className="glass-label">Active Offsets</label>
                 {(() => {
                   const offsetsMap = profile.wfh_offsets || {};
                   const renderedKeys = new Set<string>();
@@ -2845,7 +2841,7 @@ export default function DashboardPage() {
                                 transition: 'opacity 0.2s',
                                 opacity: 0.85
                               }}
-                              title="Remove swap"
+                              title="Remove offset"
                             >
                               <Trash2 style={{ width: '14px', height: '14px' }} />
                             </button>
