@@ -323,6 +323,52 @@ export default function DashboardPage() {
             addToast('Sync Succeeded', `Successfully connected and synced logs after ${attempt} attempts!`, 'sync', 'success');
           }
           
+          // Fetch timelog history to check for background automation successes!
+          let activeUserId = profile.id;
+          if (!activeUserId) {
+            const { data: { session } } = await supabase.auth.getSession();
+            activeUserId = session?.user?.id || '';
+          }
+          
+          if (activeUserId) {
+            try {
+              const { data: dbHistory } = await supabase
+                .from('timelog_history')
+                .select('*')
+                .eq('user_id', activeUserId);
+                
+              if (dbHistory && dbHistory.length > 0) {
+                const storageKey = `notified-automations-${activeUserId}`;
+                const notifiedStr = localStorage.getItem(storageKey) || '[]';
+                let notifiedList: string[] = [];
+                try {
+                  notifiedList = JSON.parse(notifiedStr);
+                } catch (e) {
+                  notifiedList = [];
+                }
+                
+                let updated = false;
+                
+                dbHistory.forEach((hist: any) => {
+                  const histKey = `${hist.date}-${hist.mode}`; // e.g. "2026-06-01-login"
+                  if (!notifiedList.includes(histKey)) {
+                    // This was successfully automated and we haven't notified the user yet!
+                    const modeLabel = hist.mode === 'login' ? 'Time In' : 'Time Out';
+                    addToast(`${modeLabel} Automated`, `Successfully automated missed ${modeLabel} for workday ${hist.date}!`, hist.date, 'success');
+                    notifiedList.push(histKey);
+                    updated = true;
+                  }
+                });
+                
+                if (updated) {
+                  localStorage.setItem(storageKey, JSON.stringify(notifiedList));
+                }
+              }
+            } catch (histErr) {
+              console.error('Failed to check background automation history:', histErr);
+            }
+          }
+          
           // Auto-focus calendar on the most recent log's month!
           if (data.logs.length > 0) {
             try {
