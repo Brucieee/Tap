@@ -2630,7 +2630,6 @@ export default function DashboardPage() {
                 <div>
                   <label className="glass-label" htmlFor="login-time-input">Log In Time</label>
                   <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.5rem' }}>
-                    <Clock className="ui-input-icon" />
                     <input
                       id="login-time-input"
                       type="time"
@@ -2639,8 +2638,8 @@ export default function DashboardPage() {
                       className="ui-input"
                       style={{
                         borderRadius: '14px',
-                        paddingLeft: '2.75rem',
-                        paddingRight: '1rem'
+                        paddingLeft: '1.25rem',
+                        paddingRight: '0.5rem'
                       }}
                       required
                     />
@@ -2650,7 +2649,6 @@ export default function DashboardPage() {
                 <div>
                   <label className="glass-label" htmlFor="logout-time-input">Log Out Time</label>
                   <div className="ui-input-wrapper" style={{ marginBottom: 0, marginTop: '0.5rem' }}>
-                    <Clock className="ui-input-icon" />
                     <input
                       id="logout-time-input"
                       type="time"
@@ -2659,8 +2657,8 @@ export default function DashboardPage() {
                       className="ui-input"
                       style={{
                         borderRadius: '14px',
-                        paddingLeft: '2.75rem',
-                        paddingRight: '1rem'
+                        paddingLeft: '1.25rem',
+                        paddingRight: '0.5rem'
                       }}
                       required
                     />
