@@ -196,8 +196,22 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Remove seconds for a cleaner look
-      cleanTime = cleanTime.replace(/:00\b/g, '');
+      // Remove seconds for a cleaner look while keeping minutes (e.g. 5:00 PM instead of 5 PM)
+      try {
+        const timeParts = cleanTime.split(/\s+/);
+        const ampm = timeParts.find(p => /AM|PM/i.test(p));
+        const justTime = timeParts.find(p => p.includes(':'));
+        if (justTime) {
+          const subParts = justTime.split(':');
+          if (subParts.length >= 2) {
+            const hh = subParts[0];
+            const mm = subParts[1];
+            cleanTime = `${hh}:${mm}${ampm ? ' ' + ampm.toUpperCase() : ''}`;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to clean seconds in API:', e);
+      }
 
       parsedLogs.push({
         date: cleanDate,

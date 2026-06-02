@@ -1624,16 +1624,20 @@ export default function DashboardPage() {
                     ? trimmed.split(/\s+/).slice(1).join(' ') 
                     : trimmed;
                   
-                  // Match HH:MM:SS with or without AM/PM
-                  const timeRegex = /^(\d{1,2}):(\d{2}):(\d{2})(?:\s*([AP]M))?$/i;
-                  const match = timeOnly.match(timeRegex);
-                  if (match) {
-                    const [_, h, m, s, ampm] = match;
-                    return `${parseInt(h, 10)}:${m}${ampm ? ' ' + ampm.toUpperCase() : ''}`;
+                  // If the time has two colons (HH:MM:SS), drop the seconds part
+                  const parts = timeOnly.split(':');
+                  if (parts.length === 3) {
+                    const hh = parts[0];
+                    const mm = parts[1];
+                    const ssWithAmpm = parts[2];
+                    
+                    const ampmMatch = ssWithAmpm.match(/\s*([AP]M)/i);
+                    const ampm = ampmMatch ? ' ' + ampmMatch[1].toUpperCase() : '';
+                    return `${parseInt(hh, 10)}:${mm}${ampm}`;
                   }
                   
-                  // Fallback: drop seconds only
-                  return timeOnly.replace(/:(\d{2})\b(?=\s*[AP]M|$)/i, '');
+                  // If it has only one colon (HH:MM), keep it exactly as is
+                  return timeOnly;
                 } catch {
                   return timeStr;
                 }
