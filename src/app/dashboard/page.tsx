@@ -260,6 +260,7 @@ export default function DashboardPage() {
   const [portalLogsViewMode, setPortalLogsViewMode] = useState<'calendar' | 'list'>('calendar');
   const [calendarMonthOffset, setCalendarMonthOffset] = useState<number>(0);
   const [recoveryStatus, setRecoveryStatus] = useState<{ date: string; modeLabel: string; state: 'running' | 'success' | 'failed' } | null>(null);
+  const [deletingDocNo, setDeletingDocNo] = useState<string | null>(null);
   const attemptedRecoveriesRef = useRef<Set<string>>(new Set());
   const [toasts, setToasts] = useState<Array<{ id: string; title: string; message: string; date: string; type: 'info' | 'success' | 'failed' }>>([]);
   const [isAdminWorkspaceExpanded, setIsAdminWorkspaceExpanded] = useState<boolean>(false);
@@ -607,6 +608,31 @@ export default function DashboardPage() {
         addToast('Sync Failed', `Connection failed after 3 attempts: ${err.message || 'Portal unreachable'}`, 'sync', 'failed');
         setLoadingPortalLogs(false);
       }
+    }
+  };
+
+  const handleDeletePortalLog = async (docNo: string) => {
+    if (!confirm('Are you sure you want to delete this timelog record from the portal?')) {
+      return;
+    }
+    setDeletingDocNo(docNo);
+    addToast('Deletion Initiated', `Manual deletion sequence started for Log #${docNo}...`, 'delete', 'info');
+    try {
+      const res = await fetch(`/api/portal-logs?docNo=${docNo}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        addToast('Deletion Successful', `Timelog record #${docNo} has been deleted successfully!`, 'delete', 'success');
+        // Refresh portal logs
+        handleSyncPortalLogs();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete record.');
+      }
+    } catch (err: any) {
+      addToast('Deletion Failed', `Failed to delete record: ${err.message}`, 'delete', 'failed');
+    } finally {
+      setDeletingDocNo(null);
     }
   };
 
@@ -2443,10 +2469,12 @@ export default function DashboardPage() {
                       <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
                         <thead>
                           <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                            <th style={{ width: '25%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Date</th>
-                            <th style={{ width: '25%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Time</th>
-                            <th style={{ width: '25%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Mode</th>
-                            <th style={{ width: '25%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Status</th>
+                            <th style={{ width: '20%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Date</th>
+                            <th style={{ width: '20%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Time</th>
+                            <th style={{ width: '15%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Mode</th>
+                            <th style={{ width: '15%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Status</th>
+                            <th style={{ width: '15%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>DocNo</th>
+                            <th style={{ width: '15%', padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--brand-navy)', textAlign: 'left' }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2456,13 +2484,13 @@ export default function DashboardPage() {
                             
                             return (
                               <tr key={index} style={{ borderBottom: index === portalLogs.length - 1 ? 'none' : '1px solid #f1f5f9', backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                                <td style={{ width: '25%', padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                <td style={{ width: '20%', padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                                   {log.date.includes(' ') ? log.date.split(/\s+/)[0] : log.date}
                                 </td>
-                                <td style={{ width: '25%', padding: '0.75rem 1rem', color: '#475569', fontWeight: 500 }}>
+                                <td style={{ width: '20%', padding: '0.75rem 1rem', color: '#475569', fontWeight: 500 }}>
                                   {formatCleanTime(log.time)}
                                 </td>
-                                <td style={{ width: '25%', padding: '0.75rem 1rem' }}>
+                                <td style={{ width: '15%', padding: '0.75rem 1rem' }}>
                                   <span style={{
                                     fontSize: '0.7rem',
                                     fontWeight: 700,
@@ -2475,7 +2503,7 @@ export default function DashboardPage() {
                                     {log.mode}
                                   </span>
                                 </td>
-                                <td style={{ width: '25%', padding: '0.75rem 1rem' }}>
+                                <td style={{ width: '15%', padding: '0.75rem 1rem' }}>
                                   <span style={{
                                     fontSize: '0.7rem',
                                     fontWeight: 700,
@@ -2486,6 +2514,43 @@ export default function DashboardPage() {
                                   }}>
                                     {log.status}
                                   </span>
+                                </td>
+                                <td style={{ width: '15%', padding: '0.75rem 1rem', fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                  {log.docNo || '—'}
+                                </td>
+                                <td style={{ width: '15%', padding: '0.75rem 1rem' }}>
+                                  {log.docNo ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeletePortalLog(log.docNo)}
+                                      disabled={deletingDocNo !== null}
+                                      style={{
+                                        background: deletingDocNo === log.docNo ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)',
+                                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                                        color: '#ef4444',
+                                        borderRadius: '6px',
+                                        fontSize: '0.7rem',
+                                        fontWeight: 700,
+                                        padding: '4px 8px',
+                                        cursor: deletingDocNo !== null ? 'not-allowed' : 'pointer',
+                                        transition: 'all 0.2s',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                    >
+                                      {deletingDocNo === log.docNo ? (
+                                        <>
+                                          <Loader2 size={10} className="animate-spin" />
+                                          Deleting
+                                        </>
+                                      ) : (
+                                        'Delete'
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>—</span>
+                                  )}
                                 </td>
                               </tr>
                             );

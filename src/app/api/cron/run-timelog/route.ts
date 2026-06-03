@@ -754,14 +754,12 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
         }
       }
 
-      if (!success) {
-        return {
-          userId,
-          employeeId: decryptedEmployeeId,
-          status: 'failed' as const,
-          message: `Automation Error (failed after ${maxRetries} attempts): ${lastError?.message || 'Unknown error'}`
-        };
-      }
+      return {
+        userId,
+        employeeId: decryptedEmployeeId,
+        status: 'failed' as const,
+        message: `Automation Error (failed after ${maxRetries} attempts): ${lastError?.message || 'Unknown error'}`
+      };
     };
 
     // Process profiles in parallel

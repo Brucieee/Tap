@@ -1,0 +1,256 @@
+[
+  {
+    "tIdx": 0,
+    "id": "ctl00_ContentPlaceHolder1_grdvw_posts",
+    "className": "footable table toggle-medium tablet footable-loaded",
+    "rowsCount": 10,
+    "rowsData": [
+      {
+        "rIdx": 0,
+        "cellsText": [
+          "DOCNO",
+          "Type",
+          "Timelog",
+          "Mode",
+          "Date",
+          "Status"
+        ],
+        "links": [
+          {
+            "text": "DOCNO",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts','Sort$docno')"
+          },
+          {
+            "text": "Type",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts','Sort$mode')"
+          },
+          {
+            "text": "Timelog",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts','Sort$start_date')"
+          },
+          {
+            "text": "Mode",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts','Sort$mode')"
+          },
+          {
+            "text": "Date",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts','Sort$apply_date')"
+          },
+          {
+            "text": "Status",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts','Sort$status')"
+          }
+        ]
+      },
+      {
+        "rIdx": 1,
+        "cellsText": [
+          "0002680745",
+          "C",
+          "6/3/2026 8:00:00 AM",
+          "I",
+          "6/3/2026",
+          "1"
+        ],
+        "links": [
+          {
+            "text": "0002680745",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts$ctl02$LinkButton1','')"
+          }
+        ]
+      },
+      {
+        "rIdx": 2,
+        "cellsText": [
+          "0002679922",
+          "C",
+          "6/1/2026 5:00:00 PM",
+          "O",
+          "6/1/2026",
+          "1"
+        ],
+        "links": [
+          {
+            "text": "0002679922",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts$ctl03$LinkButton1','')"
+          }
+        ]
+      },
+      {
+        "rIdx": 3,
+        "cellsText": [
+          "0002679920",
+          "C",
+          "6/1/2026 8:00:00 AM",
+          "I",
+          "6/1/2026",
+          "1"
+        ],
+        "links": [
+          {
+            "text": "0002679920",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts$ctl04$LinkButton1','')"
+          }
+        ]
+      },
+      {
+        "rIdx": 4,
+        "cellsText": [
+          "0002676634",
+          "C",
+          "5/25/2026 5:00:00 PM",
+          "O",
+          "5/25/2026",
+          "A"
+        ],
+        "links": [
+          {
+            "text": "0002676634",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts$ctl05$LinkButton1','')"
+          }
+        ]
+      },
+      {
+        "rIdx": 5,
+        "cellsText": [
+          "0002676374",
+          "C",
+          "5/25/2026 8:00:00 AM",
+          "I",
+          "5/25/2026",
+          "A"
+        ],
+        "links": [
+          {
+            "text": "0002676374",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts$ctl06$LinkButton1','')"
+          }
+        ]
+      },
+      {
+        "rIdx": 6,
+        "cellsText": [
+          "0002675690",
+          "C",
+          "5/22/2026 5:00:00 PM",
+          "O",
+          "5/22/2026",
+          "A"
+        ],
+        "links": [
+          {
+            "text": "0002675690",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts$ctl07$LinkButton1','')"
+          }
+        ]
+      },
+      {
+        "rIdx": 7,
+        "cellsText": [
+          "0002675688",
+          "C",
+          "5/22/2026 8:00:00 AM",
+          "I",
+          "5/22/2026",
+          "A"
+        ],
+        "links": [
+          {
+            "text": "0002675688",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts$ctl08$LinkButton1','')"
+          }
+        ]
+      },
+      {
+        "rIdx": 8,
+        "cellsText": [
+          "0002673605",
+          "C",
+          "5/20/2026 5:00:00 PM",
+          "O",
+          "5/20/2026",
+          "A"
+        ],
+        "links": [
+          {
+            "text": "0002673605",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts$ctl09$LinkButton1','')"
+          }
+        ]
+      },
+      {
+        "rIdx": 9,
+        "cellsText": [
+          "0002673490",
+          "C",
+          "5/20/2026 8:00:00 AM",
+          "I",
+          "5/20/2026",
+          "A"
+        ],
+        "links": [
+          {
+            "text": "0002673490",
+            "href": "javascript:__doPostBack('ctl00$ContentPlaceHolder1$grdvw_posts$ctl10$LinkButton1','')"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "tIdx": 1,
+    "id": "",
+    "className": "table",
+    "rowsCount": 6,
+    "rowsData": [
+      {
+        "rIdx": 0,
+        "cellsText": [
+          "Max. Loanable Amount per Tenure",
+          ""
+        ],
+        "links": []
+      },
+      {
+        "rIdx": 1,
+        "cellsText": [
+          "Share Capital",
+          ""
+        ],
+        "links": []
+      },
+      {
+        "rIdx": 2,
+        "cellsText": [
+          "Capital Build-Up",
+          ""
+        ],
+        "links": []
+      },
+      {
+        "rIdx": 3,
+        "cellsText": [
+          "Total Max. Loanable Amount",
+          ""
+        ],
+        "links": []
+      },
+      {
+        "rIdx": 4,
+        "cellsText": [
+          "Less: OS Balance of Existing Loan",
+          ""
+        ],
+        "links": []
+      },
+      {
+        "rIdx": 5,
+        "cellsText": [
+          "Max. Loanable Amount, Net",
+          ""
+        ],
+        "links": []
+      }
+    ]
+  }
+]
