@@ -80,11 +80,19 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
   // Get current day of the week in English (e.g., 'Monday', 'Tuesday', etc.)
   // We can also allow overriding the day for testing, e.g., ?day=Monday
   const dayParam = searchParams.get('day');
-  const currentDay = dayParam || new Date().toLocaleDateString('en-US', { weekday: 'long' });
+  const currentDay = dayParam || new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Manila',
+    weekday: 'long'
+  }).format(new Date());
 
   // Get current calendar date in YYYY-MM-DD format (or allow ?date=2026-05-26)
   const dateParam = searchParams.get('date');
-  const currentDate = dateParam || new Date().toISOString().split('T')[0];
+  const currentDate = dateParam || new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
 
   const results: Array<{
     userId: string;
@@ -350,8 +358,8 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       });
     }
 
-    // 3. Process each profile
-    for (const profile of profiles) {
+    // 3. Process each profile in parallel
+    const processProfile = async (profile: any) => {
       const userId = profile.id;
       
       // Get Tap user email to match with Standly profile for leaves
@@ -403,16 +411,13 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
 
       if (!encryptedEmployeeId || !encryptedPassword) {
         console.log(`[Profile Evaluation] User ${userId}: Skipped - Corporate credentials missing.`);
-        results.push({
+        return {
           userId,
           employeeId: 'N/A',
-          status: 'skipped',
+          status: 'skipped' as const,
           message: 'Corporate credentials are not configured or missing.'
-        });
-        continue;
+        };
       }
-
-      const isManualTest = searchParams.get('test') === 'true' || isUserSession;
 
       // Handle Holiday skip for manual tests logging
       if (matchedHoliday && isManualTest) {
@@ -423,13 +428,12 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       if (isUserOnLeave) {
         console.log(`[Profile Evaluation] User ${userId}: Skipped - User is on leave (${leaveReason}).`);
         const decryptedEmployeeId = decrypt(encryptedEmployeeId);
-        results.push({
+        return {
           userId,
           employeeId: decryptedEmployeeId || 'Configured',
-          status: 'skipped',
+          status: 'skipped' as const,
           message: `Skipped: User is on leave [${leaveReason}].`
-        });
-        continue;
+        };
       }
 
       // Check WFH schedule match
@@ -476,13 +480,12 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
 
       if (!isWfhDay && !isManualTest && !hasManualLoginToday) {
         console.log(`[Profile Evaluation] User ${userId}: Skipped - ${wfhReasonText}.`);
-        results.push({
+        return {
           userId,
           employeeId: 'Configured',
-          status: 'skipped',
+          status: 'skipped' as const,
           message: wfhReasonText
-        });
-        continue;
+        };
       }
 
       const decryptedEmployeeId = decrypt(encryptedEmployeeId);
@@ -490,13 +493,12 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
 
       if (!decryptedEmployeeId || !decryptedPassword) {
         console.log(`[Profile Evaluation] User ${userId}: Failed - Decryption error.`);
-        results.push({
+        return {
           userId,
           employeeId: 'Failed Decryption',
-          status: 'failed',
+          status: 'failed' as const,
           message: 'Failed to decrypt corporate credentials. Please update them.'
-        });
-        continue;
+        };
       }
 
       // Check database for existing successful submission today
@@ -514,13 +516,12 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
         } else if (!isManualTest && dbLog && dbLog.length > 0) {
           const skipMsg = `Skipped: Today's ${modeText} timelog already exists in Tap database history (submitted at ${dbLog[0].created_at}).`;
           console.log(`[Database History Check] ${skipMsg}`);
-          results.push({
+          return {
             userId,
             employeeId: decryptedEmployeeId,
-            status: 'skipped',
+            status: 'skipped' as const,
             message: skipMsg
-          });
-          continue;
+          };
         }
       } catch (err: any) {
         console.warn(`[Database History Check Exception] Gracefully falling back to browser scraping check:`, err.message);
@@ -533,13 +534,12 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       if (matchedEvent && isExcludedFromEvent) {
         const msg = `Skipped: User is excluded from Company Event "${matchedEvent.title}" on date ${currentDate}.`;
         console.log(`[Company Event Exclusion] User ${userId}: ${msg}`);
-        results.push({
+        return {
           userId,
           employeeId: decryptedEmployeeId,
-          status: 'skipped',
+          status: 'skipped' as const,
           message: msg
-        });
-        continue;
+        };
       }
 
       let timeToInject;
@@ -561,13 +561,12 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       if (isHourlySchedule && !isManualTest && configuredHour !== currentPhtHour) {
         const msg = `Skipped: User's configured ${modeText} hour (${configuredHour}) does not match current PHT hour (${currentPhtHour}).`;
         console.log(`[Profile Evaluation] User ${userId}: ${msg}`);
-        results.push({
+        return {
           userId,
           employeeId: decryptedEmployeeId,
-          status: 'skipped',
+          status: 'skipped' as const,
           message: msg
-        });
-        continue;
+        };
       }
 
       // Execute Playwright flow in isolation for this user with automatic self-healing retries
@@ -642,14 +641,13 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
           if (hasDatePattern && hasModeKeyword) {
             const skipMsg = `Skipped: Today's ${modeText} timelog already exists on the company portal grid.`;
             console.log(`[Double Run Check] ${skipMsg}`);
-            results.push({
+            success = true;
+            return {
               userId,
               employeeId: decryptedEmployeeId,
-              status: 'skipped',
+              status: 'skipped' as const,
               message: skipMsg
-            });
-            success = true;
-            break;
+            };
           }
 
           // 2. Click "Add New" button to open/render the timelog submission form
@@ -739,14 +737,13 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
             successMessage = `Successfully submitted timelog ${modeText} for WFH day (${currentDay}) at ${timeToInject}.`;
           }
 
-          results.push({
+          success = true;
+          return {
             userId,
             employeeId: decryptedEmployeeId,
-            status: 'success',
+            status: 'success' as const,
             message: successMessage
-          });
-
-          success = true;
+          };
         } catch (browserError: any) {
           console.error(`Browser automation failed for user ${userId} on attempt ${attempt}/${maxRetries}:`, browserError);
           lastError = browserError;
@@ -758,14 +755,17 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       }
 
       if (!success) {
-        results.push({
+        return {
           userId,
           employeeId: decryptedEmployeeId,
-          status: 'failed',
+          status: 'failed' as const,
           message: `Automation Error (failed after ${maxRetries} attempts): ${lastError?.message || 'Unknown error'}`
-        });
+        };
       }
-    }
+    };
+
+    // Process profiles in parallel
+    const results = await Promise.all(profiles.map(processProfile));
 
 
 

@@ -309,19 +309,71 @@ export default function DashboardPage() {
       }
     });
 
-    // 2. Loop through the last 7 calendar days (excluding today)
+    // Get current PHT time components for checking "today" limits
+    const nowPht = new Date();
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false
+    });
+    const parts = formatter.formatToParts(nowPht);
+    const phtHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+    const phtMinute = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+    const currentPhtTimeStr = `${phtHour.toString().padStart(2, '0')}:${phtMinute.toString().padStart(2, '0')}`;
+
+    const addMinutesToTimeStr = (timeStr: string, mins: number) => {
+      try {
+        const [h, m] = timeStr.split(':').map(Number);
+        const totalMins = h * 60 + m + mins;
+        const newH = Math.floor(totalMins / 60) % 24;
+        const newM = totalMins % 60;
+        return `${newH.toString().padStart(2, '0')}:${newM.toString().padStart(2, '0')}`;
+      } catch {
+        return timeStr;
+      }
+    };
+
+    // 2. Loop through the last 7 calendar days (including today)
     const today = new Date();
     const missedDatesToRecover: Array<{ date: string; mode: 'login' | 'logout' }> = [];
 
-    for (let i = 1; i <= 7; i++) {
+    for (let i = 0; i <= 7; i++) {
       const pastDate = new Date();
       pastDate.setDate(today.getDate() - i);
       
+      // Get PHT date and day components to be timezone robust
+      const phtDateParts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(pastDate);
+      const yearStr = phtDateParts.find(p => p.type === 'year')?.value || '';
+      const monthStr = phtDateParts.find(p => p.type === 'month')?.value || '';
+      const dayStr = phtDateParts.find(p => p.type === 'day')?.value || '';
+      const dateKey = `${yearStr}-${monthStr}-${dayStr}`;
+
+      const weekdayStr = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Manila',
+        weekday: 'long'
+      }).format(pastDate);
+
       // Enforce Cut-off Boundary (1st Cut-off: 1-15, 2nd Cut-off: 16-31 of the current month)
       const todayDay = today.getDate();
-      const pastDay = pastDate.getDate();
+      const pastDay = parseInt(dayStr, 10);
       const isTodayInFirstCutoff = todayDay <= 15;
-      const isSameMonth = pastDate.getMonth() === today.getMonth() && pastDate.getFullYear() === today.getFullYear();
+      
+      // Verify same month/year in PHT
+      const todayPhtParts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit'
+      }).formatToParts(today);
+      const todayYear = todayPhtParts.find(p => p.type === 'year')?.value || '';
+      const todayMonth = todayPhtParts.find(p => p.type === 'month')?.value || '';
+      
+      const isSameMonth = yearStr === todayYear && monthStr === todayMonth;
       
       if (!isSameMonth) {
         continue; // Skip dates in a different month (belongs to a closed past cut-off)
@@ -337,14 +389,7 @@ export default function DashboardPage() {
         }
       }
       
-      const dayOfWeek = pastDate.getDay(); // 0 = Sunday, 6 = Saturday
-      if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Skip weekends
-
-      // Format as YYYY-MM-DD for map check
-      const yearStr = pastDate.getFullYear();
-      const monthStr = (pastDate.getMonth() + 1).toString().padStart(2, '0');
-      const dayStr = pastDate.getDate().toString().padStart(2, '0');
-      const dateKey = `${yearStr}-${monthStr}-${dayStr}`;
+      if (weekdayStr === 'Saturday' || weekdayStr === 'Sunday') continue; // Skip weekends
 
       // Check if there is a company event on this past date and if the user is excluded from it
       const matchedEvent = companyEvents.find(e => e.date === dateKey);
@@ -372,17 +417,43 @@ export default function DashboardPage() {
       } else if (resolvedStatus === 'office') {
         isWfhDayForPastDate = false;
       } else {
-        const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const pastWeekdayName = WEEKDAY_NAMES[dayOfWeek];
         const wfhDaysList = activeWfhDays || profile.wfh_days;
-        isWfhDayForPastDate = wfhDaysList && wfhDaysList.includes(pastWeekdayName);
+        isWfhDayForPastDate = wfhDaysList && wfhDaysList.includes(weekdayStr);
       }
 
+      let shouldRecoverLogin = false;
+      if (!hasTimeIn && isWfhDayForPastDate && !attemptedRecoveriesRef.current.has(`${dateKey}-login`)) {
+        if (i === 0) {
+          // Today: check if current time is past configured login time + 15 mins
+          const configLoginTime = profile.login_time || '08:00';
+          const triggerTimeLimit = addMinutesToTimeStr(configLoginTime, 15);
+          if (currentPhtTimeStr > triggerTimeLimit) {
+            shouldRecoverLogin = true;
+          }
+        } else {
+          shouldRecoverLogin = true;
+        }
+      }
+
+      let shouldRecoverLogout = false;
       if (hasTimeIn && !hasTimeOut && !attemptedRecoveriesRef.current.has(`${dateKey}-logout`)) {
+        if (i === 0) {
+          // Today: check if current time is past configured logout time + 15 mins
+          const configLogoutTime = profile.logout_time || '17:00';
+          const triggerTimeLimit = addMinutesToTimeStr(configLogoutTime, 15);
+          if (currentPhtTimeStr > triggerTimeLimit) {
+            shouldRecoverLogout = true;
+          }
+        } else {
+          shouldRecoverLogout = true;
+        }
+      }
+
+      if (shouldRecoverLogout) {
         // Found a missed timeout! Add to queue and mark as attempted to prevent recursion loops
         attemptedRecoveriesRef.current.add(`${dateKey}-logout`);
         missedDatesToRecover.push({ date: dateKey, mode: 'logout' });
-      } else if (!hasTimeIn && !hasTimeOut && isWfhDayForPastDate && !attemptedRecoveriesRef.current.has(`${dateKey}-login`)) {
+      } else if (shouldRecoverLogin) {
         // Found a missed workday completely (both in and out are missing), and WFH was scheduled!
         // Start by recovering the login first!
         attemptedRecoveriesRef.current.add(`${dateKey}-login`);
