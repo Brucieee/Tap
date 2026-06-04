@@ -3,7 +3,7 @@ const http = require('http');
 const options = {
   hostname: 'localhost',
   port: 3000,
-  path: '/api/cron/run-timelog?schedule=hourly&test=true&stream=true',
+  path: '/api/cron/run-timelog?schedule=hourly&test=true&stream=true&dryRun=true',
   method: 'GET'
 };
 

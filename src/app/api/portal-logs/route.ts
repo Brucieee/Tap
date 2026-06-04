@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { decrypt } from '@/utils/encryption';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Extend serverless execution limit to 60 seconds
+export const maxDuration = 300; // Extend serverless execution limit to 300 seconds
 
 export async function GET(request: NextRequest) {
   let browser: any = null;
@@ -424,7 +424,7 @@ export async function GET(request: NextRequest) {
     try {
       const fs = require('fs');
       const path = require('path');
-      const scratchDir = 'C:\\Users\\Bruce Wayne Lim\\.gemini\\antigravity\\brain\\31b9f260-52e5-4f5d-89a0-31494b201582\\scratch';
+      const scratchDir = path.join(process.cwd(), 'scratch');
       if (!fs.existsSync(scratchDir)) {
         fs.mkdirSync(scratchDir, { recursive: true });
       }

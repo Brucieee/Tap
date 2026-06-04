@@ -6,7 +6,7 @@ import { AsyncLocalStorage } from 'async_hooks';
 
 // Force dynamic execution for API routes that fetch fresh database records
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Extend serverless execution duration up to 60 seconds (Hobby plan supports up to 300s!)
+export const maxDuration = 300; // Extend serverless execution duration up to 300 seconds (5 minutes)
 
 const logStorage = new AsyncLocalStorage<{
   log: (msg: string, status: 'info' | 'success' | 'warn' | 'error') => void;
@@ -44,8 +44,6 @@ if (typeof global !== 'undefined') {
 }
 
 async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParams) {
-  let browser: any = null;
-  
   // Security check: Verify a cron secret token to prevent unauthorized triggers
   const authHeader = request.headers.get('authorization');
   const cronSecret = searchParams.get('secret') || (authHeader ? authHeader.replace('Bearer ', '') : null);
@@ -59,7 +57,8 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
   }
 
   // Get current hour in Philippine Time (PHT, Asia/Manila, GMT+8)
-  const currentPhtHour = parseInt(
+  const hourParam = searchParams.get('hour');
+  const currentPhtHour = hourParam ? parseInt(hourParam, 10) : parseInt(
     new Intl.DateTimeFormat('en-US', {
       timeZone: 'Asia/Manila',
       hour: 'numeric',
@@ -93,6 +92,8 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
     month: '2-digit',
     day: '2-digit'
   }).format(new Date());
+
+  const isDryRun = searchParams.get('dryRun') === 'true' || process.env.DRY_RUN === 'true';
 
   const results: Array<{
     userId: string;
@@ -250,11 +251,18 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       profiles = data;
       dbError = error;
     } else {
-      // Automated Cron Job: Fetch all active profiles
-      const { data, error } = await supabase
+      // Automated Cron Job: Fetch active profiles (allow targeting a specific userId if provided)
+      const targetUserId = searchParams.get('userId');
+      let query = supabase
         .from('user_profiles')
         .select('*')
         .eq('is_automation_enabled', true);
+      
+      if (targetUserId) {
+        query = query.eq('id', targetUserId);
+      }
+      
+      const { data, error } = await query;
       profiles = data;
       dbError = error;
     }
@@ -278,18 +286,9 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
     }
     console.log(`Found ${profiles.length} active automation profiles. Evaluating schedules...`);
 
-    // 2. Launch browser (Remote CDP on Vercel if URL is provided, otherwise local headless Chromium)
+    // 2. Setup browser launcher settings (Remote CDP on Vercel if URL is provided, otherwise local headless Chromium)
     const remoteUrl = process.env.NODE_ENV === 'development' ? null : process.env.PLAYWRIGHT_SERVICE_URL;
     
-    // Test browserless reachability
-    try {
-      console.log('Testing Browserless API reachability via fetch...');
-      const testRes = await fetch('https://chrome.browserless.io/status');
-      console.log('Browserless status response code:', testRes.status);
-    } catch (fetchErr: any) {
-      console.error('Browserless API fetch check failed:', fetchErr.message);
-    }
-
     // Dynamic import to prevent top-level cold-start bundler crashes on Vercel
     let playwright;
     try {
@@ -300,112 +299,23 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
     }
 
     const { chromium } = playwright;
-    browser = null;
-    if (remoteUrl) {
-      let formattedUrl = remoteUrl;
-      // Auto-format Browserless.io URL if user provided root path
-      if (remoteUrl.includes('browserless.io') && !remoteUrl.includes('/playwright') && !remoteUrl.includes('/chromium')) {
-        try {
-          const urlObj = new URL(remoteUrl);
-          urlObj.pathname = '/chromium/playwright';
-          formattedUrl = urlObj.toString();
-          console.log(`Auto-formatted Browserless.io URL to: ${formattedUrl}`);
-        } catch (urlErr) {
-          console.error('Failed to parse remoteUrl, keeping raw:', remoteUrl, urlErr);
-        }
+    let formattedUrl = remoteUrl;
+    if (remoteUrl && remoteUrl.includes('browserless.io') && !remoteUrl.includes('/playwright') && !remoteUrl.includes('/chromium')) {
+      try {
+        const urlObj = new URL(remoteUrl);
+        urlObj.pathname = '/chromium/playwright';
+        formattedUrl = urlObj.toString();
+        console.log(`Auto-formatted Browserless.io URL to: ${formattedUrl}`);
+      } catch (urlErr) {
+        console.error('Failed to parse remoteUrl, keeping raw:', remoteUrl, urlErr);
       }
-
-      console.log(`Connecting to remote Playwright browser service...`);
-      const maxConnRetries = 12; // Wait up to 30 seconds for concurrent slots to open up
-      let connAttempt = 0;
-      let connSuccess = false;
-      
-      while (connAttempt < maxConnRetries && !connSuccess) {
-        connAttempt++;
-        try {
-          if (connAttempt > 1) {
-            const backoffMs = 2500;
-            console.log(`[Browser Queue] Slot occupied. Attempt ${connAttempt}/${maxConnRetries}: Retrying remote connection in ${backoffMs}ms...`);
-            await new Promise(resolve => setTimeout(resolve, backoffMs));
-          }
-
-          if (formattedUrl.includes('/playwright')) {
-            console.log(`Connecting via Playwright native chromium.connect (Attempt ${connAttempt})...`);
-            browser = await chromium.connect({ 
-              wsEndpoint: formattedUrl,
-              timeout: 20000
-            });
-          } else {
-            console.log(`Connecting via CDP chromium.connectOverCDP (Attempt ${connAttempt})...`);
-            browser = await chromium.connectOverCDP(formattedUrl, {
-              timeout: 20000
-            });
-          }
-          connSuccess = true;
-          console.log('Successfully established connection to Playwright Remote Browser!');
-        } catch (connErr: any) {
-          console.error(`[Browser Connection Attempt ${connAttempt} Failed]:`, connErr.message);
-          if (connAttempt >= maxConnRetries) {
-            throw new Error(`Failed to connect to remote Playwright service after ${maxConnRetries} attempts. Last error: ${connErr.message}`);
-          }
-        }
-      }
-    } else {
-      console.log('Launching local Chromium browser...');
-      browser = await chromium.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-      });
     }
 
     // 3. Process each profile in parallel
     const processProfile = async (profile: any) => {
       const userId = profile.id;
       
-      // Get Tap user email to match with Standly profile for leaves
-      const userEmailStr = tapUserEmails.get(userId);
-      let isUserOnLeave = false;
-      let leaveReason = '';
-      
-      if (userEmailStr && standlyProfiles.length > 0 && standlyLeaves.length > 0) {
-        const standlyProfile = standlyProfiles.find(
-          (p: any) => p.email && p.email.toLowerCase() === userEmailStr.toLowerCase()
-        );
-        
-        if (standlyProfile) {
-          const userLeave = standlyLeaves.find((l: any) => {
-            if (l.user_id !== standlyProfile.id) return false;
-            
-            // Check if date matches
-            const isDateMatched = currentDate >= l.start_date && currentDate <= l.end_date;
-            if (!isDateMatched) return false;
-
-            // Check if time matches current login/logout mode for half-day leaves
-            if (l.start_time && l.end_time) {
-              if (modeParam === 'login') {
-                // Morning leave covers the login mode (starts before 12:00 PM)
-                return l.start_time < '12:00:00';
-              } else {
-                // Afternoon leave covers the logout mode (ends after 12:00 PM)
-                return l.end_time > '12:00:00';
-              }
-            }
-
-            // Full-day leave
-            return true;
-          });
-          
-          if (userLeave) {
-            isUserOnLeave = true;
-            const timeInfo = (userLeave.start_time && userLeave.end_time)
-              ? ` (Half-day: ${userLeave.start_time.substring(0, 5)} - ${userLeave.end_time.substring(0, 5)})`
-              : '';
-            leaveReason = (userLeave.reason || userLeave.type || 'On leave') + timeInfo;
-          }
-        }
-      }
-
-      // Decrypt credentials
+      // Decrypt credentials first
       const encryptedEmployeeId = profile.employee_id;
       const encryptedPassword = profile.company_password;
 
@@ -419,25 +329,194 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
         };
       }
 
-      // Handle Holiday skip for manual tests logging
+      const decryptedEmployeeId = decrypt(encryptedEmployeeId);
+      const decryptedPassword = decrypt(encryptedPassword);
+
+      if (!decryptedEmployeeId || !decryptedPassword) {
+        console.log(`[Profile Evaluation] User ${userId}: Failed - Decryption error.`);
+        return {
+          userId,
+          employeeId: 'Failed Decryption',
+          status: 'failed' as const,
+          message: 'Failed to decrypt corporate credentials. Please update them.'
+        };
+      }
+
+      // Check for global company event overriding standard hours on this specific date
+      const matchedEvent = companyEvents.find((e: any) => e.date === currentDate);
+      const isExcludedFromEvent = matchedEvent && matchedEvent.excluded_users && matchedEvent.excluded_users.includes(userId);
+      
+      if (matchedEvent && isExcludedFromEvent) {
+        const msg = `Skipped: User is excluded from Company Event "${matchedEvent.title}" on date ${currentDate}.`;
+        console.log(`[Company Event Exclusion] User ${userId}: ${msg}`);
+        return {
+          userId,
+          employeeId: decryptedEmployeeId,
+          status: 'skipped' as const,
+          message: msg
+        };
+      }
+
+      // Determine standard times
+      let stdLoginTime: string;
+      let stdLogoutTime: string;
+      
+      if (matchedEvent && !isExcludedFromEvent) {
+        stdLoginTime = matchedEvent.login_time || '08:00:00';
+        stdLogoutTime = matchedEvent.logout_time || '12:00:00';
+        console.log(`[Company Event Override] User ${userId}: Found company event "${matchedEvent.title}" for date ${currentDate}. Standard times set to Login: ${stdLoginTime}, Logout: ${stdLogoutTime}`);
+      } else {
+        stdLoginTime = profile.login_time || '08:00:00';
+        stdLogoutTime = profile.logout_time || '17:00:00';
+      }
+
+      // Get Tap user email to match with Standly profile for leaves
+      const userEmailStr = tapUserEmails.get(userId);
+      let activeLeave: any = null;
+      
+      if (userEmailStr && standlyProfiles.length > 0 && standlyLeaves.length > 0) {
+        const standlyProfile = standlyProfiles.find(
+          (p: any) => p.email && p.email.toLowerCase() === userEmailStr.toLowerCase()
+        );
+        
+        if (standlyProfile) {
+          activeLeave = standlyLeaves.find((l: any) => {
+            if (l.user_id !== standlyProfile.id) return false;
+            // Check if date matches
+            return currentDate >= l.start_date && currentDate <= l.end_date;
+          });
+        }
+      }
+
+      interface ScheduledAction {
+        mode: 'login' | 'logout';
+        time: string;
+        hour: number;
+        reason: string;
+      }
+      
+      const scheduledActions: ScheduledAction[] = [];
+      let leaveDescription = '';
+      
+      if (activeLeave) {
+        const { start_time, end_time, reason, type } = activeLeave;
+        const leaveTypeStr = reason || type || 'On leave';
+        
+        if (start_time && end_time) {
+          // Half-day leave
+          const timeInfo = ` (Half-day: ${start_time.substring(0, 5)} - ${end_time.substring(0, 5)})`;
+          leaveDescription = leaveTypeStr + timeInfo;
+          
+          if (start_time < '12:00:00' && end_time <= '13:00:00') {
+            // Morning Half-day Leave
+            // Login at 1:00 PM (13:00:00)
+            scheduledActions.push({
+              mode: 'login',
+              time: '13:00:00',
+              hour: 13,
+              reason: `Morning half-day leave (${leaveDescription}) - Login at 1 PM`
+            });
+            // Logout at stdLogoutTime
+            scheduledActions.push({
+              mode: 'logout',
+              time: stdLogoutTime,
+              hour: parseInt(stdLogoutTime.split(':')[0], 10),
+              reason: `Morning half-day leave (${leaveDescription}) - Standard logout`
+            });
+          } else if (start_time >= '12:00:00') {
+            // Afternoon Half-day Leave
+            // Login at stdLoginTime
+            scheduledActions.push({
+              mode: 'login',
+              time: stdLoginTime,
+              hour: parseInt(stdLoginTime.split(':')[0], 10),
+              reason: `Afternoon half-day leave (${leaveDescription}) - Standard login`
+            });
+            // Logout at 12:00 PM (12:00:00)
+            scheduledActions.push({
+              mode: 'logout',
+              time: '12:00:00',
+              hour: 12,
+              reason: `Afternoon half-day leave (${leaveDescription}) - Logout at 12 PM`
+            });
+          } else {
+            // Covers the whole day (e.g. 8 AM to 5 PM) -> treat as Full-day leave
+            leaveDescription = `Full-day leave (${leaveTypeStr} ${start_time.substring(0, 5)} - ${end_time.substring(0, 5)})`;
+          }
+        } else {
+          // Full-day leave
+          leaveDescription = `Full-day leave (${leaveTypeStr})`;
+        }
+      } else {
+        // Standard Day (No Leave)
+        scheduledActions.push({
+          mode: 'login',
+          time: stdLoginTime,
+          hour: parseInt(stdLoginTime.split(':')[0], 10),
+          reason: 'Standard login'
+        });
+        scheduledActions.push({
+          mode: 'logout',
+          time: stdLogoutTime,
+          hour: parseInt(stdLogoutTime.split(':')[0], 10),
+          reason: 'Standard logout'
+        });
+      }
+
+      // Resolve the active action for this request
+      const isHourlySchedule = searchParams.get('schedule') === 'hourly';
+      let matchedAction: ScheduledAction | undefined = undefined;
+      
+      if (isHourlySchedule && !isManualTest) {
+        // Find scheduled action for the current hour
+        matchedAction = scheduledActions.find(act => act.hour === currentPhtHour);
+      } else {
+        // Manual/Sandbox run: match by requested modeParam
+        matchedAction = scheduledActions.find(act => act.mode === modeParam);
+      }
+
+      if (!matchedAction) {
+        let skipMsg = '';
+        if (activeLeave && scheduledActions.length === 0) {
+          skipMsg = `Skipped: User is on full-day leave today (${leaveDescription}).`;
+        } else if (isHourlySchedule && !isManualTest) {
+          skipMsg = `Skipped: No scheduled action matches the current PHT hour (${currentPhtHour}). Scheduled today: ${scheduledActions.map(a => `${a.mode} at ${a.time}`).join(', ')}`;
+        } else {
+          skipMsg = `Skipped: Requested mode "${modeParam}" is not scheduled today due to leave or schedule constraints. Scheduled today: ${scheduledActions.map(a => `${a.mode} at ${a.time}`).join(', ')}`;
+        }
+        
+        console.log(`[Profile Evaluation] User ${userId}: ${skipMsg}`);
+        return {
+          userId,
+          employeeId: decryptedEmployeeId,
+          status: 'skipped' as const,
+          message: skipMsg
+        };
+      }
+
+      const resolvedMode = matchedAction.mode;
+      const timeToInject = matchedAction.time;
+      const actionReason = matchedAction.reason;
+      const resolvedModeText = resolvedMode === 'login' ? 'Log In' : 'Log Out';
+
+      // Handle Holiday skip warning for manual tests
       if (matchedHoliday && isManualTest) {
         console.log(`[Profile Evaluation] User ${userId}: Holiday Warning - Today is a holiday: ${matchedHoliday.name}.`);
       }
 
-      // Check Standly Leave skip
-      if (isUserOnLeave) {
-        console.log(`[Profile Evaluation] User ${userId}: Skipped - User is on leave (${leaveReason}).`);
-        const decryptedEmployeeId = decrypt(encryptedEmployeeId);
-        return {
-          userId,
-          employeeId: decryptedEmployeeId || 'Configured',
-          status: 'skipped' as const,
-          message: `Skipped: User is on leave [${leaveReason}].`
-        };
+      // Determine if there is an active half-day leave for bypassing standard WFH schedule constraints
+      let isHalfDayLeave = false;
+      if (activeLeave) {
+        const { start_time, end_time } = activeLeave;
+        if (start_time && end_time) {
+          if ((start_time < '12:00:00' && end_time <= '13:00:00') || (start_time >= '12:00:00')) {
+            isHalfDayLeave = true;
+          }
+        }
       }
 
       // Check WFH schedule match
-      // Skip this check if running manually triggered test from the dashboard
+      // Skip this check if running manually triggered test from the dashboard or if on half-day leave
       const offsets = profile.wfh_offsets || {};
       const offsetOverride = offsets[currentDate]; // YYYY-MM-DD
       
@@ -460,7 +539,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       }
 
       let hasManualLoginToday = false;
-      if (modeParam === 'logout') {
+      if (resolvedMode === 'logout') {
         try {
           const { data: todayLogin } = await supabase
             .from('timelog_history')
@@ -478,26 +557,13 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
         }
       }
 
-      if (!isWfhDay && !isManualTest && !hasManualLoginToday) {
+      if (!isWfhDay && !isManualTest && !hasManualLoginToday && !isHalfDayLeave) {
         console.log(`[Profile Evaluation] User ${userId}: Skipped - ${wfhReasonText}.`);
         return {
           userId,
-          employeeId: 'Configured',
+          employeeId: decryptedEmployeeId,
           status: 'skipped' as const,
           message: wfhReasonText
-        };
-      }
-
-      const decryptedEmployeeId = decrypt(encryptedEmployeeId);
-      const decryptedPassword = decrypt(encryptedPassword);
-
-      if (!decryptedEmployeeId || !decryptedPassword) {
-        console.log(`[Profile Evaluation] User ${userId}: Failed - Decryption error.`);
-        return {
-          userId,
-          employeeId: 'Failed Decryption',
-          status: 'failed' as const,
-          message: 'Failed to decrypt corporate credentials. Please update them.'
         };
       }
 
@@ -508,13 +574,13 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
           .select('*')
           .eq('user_id', userId)
           .eq('date', currentDate)
-          .eq('mode', modeParam)
+          .eq('mode', resolvedMode)
           .limit(1);
 
         if (dbLogError) {
           console.warn(`[Database History Check Warning] Failed to query timelog_history for user ${userId}:`, dbLogError.message);
         } else if (!isManualTest && dbLog && dbLog.length > 0) {
-          const skipMsg = `Skipped: Today's ${modeText} timelog already exists in Tap database history (submitted at ${dbLog[0].created_at}).`;
+          const skipMsg = `Skipped: Today's ${resolvedModeText} timelog already exists in Tap database history (submitted at ${dbLog[0].created_at}).`;
           console.log(`[Database History Check] ${skipMsg}`);
           return {
             userId,
@@ -527,48 +593,6 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
         console.warn(`[Database History Check Exception] Gracefully falling back to browser scraping check:`, err.message);
       }
 
-      // Check for global company event overriding standard hours on this specific date
-      const matchedEvent = companyEvents.find((e: any) => e.date === currentDate);
-      const isExcludedFromEvent = matchedEvent && matchedEvent.excluded_users && matchedEvent.excluded_users.includes(userId);
-      
-      if (matchedEvent && isExcludedFromEvent) {
-        const msg = `Skipped: User is excluded from Company Event "${matchedEvent.title}" on date ${currentDate}.`;
-        console.log(`[Company Event Exclusion] User ${userId}: ${msg}`);
-        return {
-          userId,
-          employeeId: decryptedEmployeeId,
-          status: 'skipped' as const,
-          message: msg
-        };
-      }
-
-      let timeToInject;
-      if (matchedEvent) {
-        timeToInject = modeParam === 'login'
-          ? (matchedEvent.login_time || '08:00:00')
-          : (matchedEvent.logout_time || '12:00:00');
-        console.log(`[Company Event Override] User ${userId}: Found company event "${matchedEvent.title}" for date ${currentDate}. Overriding hours for ${modeText} mode to ${timeToInject}`);
-      } else {
-        timeToInject = modeParam === 'login' 
-          ? (profile.login_time || '08:00:00') 
-          : (profile.logout_time || '17:00:00');
-      }
-
-      // In dynamic hourly scheduling mode (?schedule=hourly), check if the user's configured hour matches the current PHT hour
-      const isHourlySchedule = searchParams.get('schedule') === 'hourly';
-      const configuredHour = parseInt(timeToInject.split(':')[0], 10);
-      
-      if (isHourlySchedule && !isManualTest && configuredHour !== currentPhtHour) {
-        const msg = `Skipped: User's configured ${modeText} hour (${configuredHour}) does not match current PHT hour (${currentPhtHour}).`;
-        console.log(`[Profile Evaluation] User ${userId}: ${msg}`);
-        return {
-          userId,
-          employeeId: decryptedEmployeeId,
-          status: 'skipped' as const,
-          message: msg
-        };
-      }
-
       // Execute Playwright flow in isolation for this user with automatic self-healing retries
       const maxRetries = 3;
       let attempt = 0;
@@ -577,6 +601,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
 
       while (attempt < maxRetries && !success) {
         attempt++;
+        let localBrowser: any = null;
         let context: any = null;
 
         try {
@@ -587,7 +612,48 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
             console.log(`Processing timelog for Employee ID: ${decryptedEmployeeId}...`);
           }
 
-          context = await browser!.newContext({
+          if (formattedUrl) {
+            console.log(`Connecting to remote Playwright browser service for ${decryptedEmployeeId}...`);
+            const maxConnRetries = 12; // Wait up to 30 seconds for concurrent slots to open up
+            let connAttempt = 0;
+            let connSuccess = false;
+            
+            while (connAttempt < maxConnRetries && !connSuccess) {
+              connAttempt++;
+              try {
+                if (connAttempt > 1) {
+                  const backoffMs = 2500;
+                  console.log(`[Browser Queue] Slot occupied for ${decryptedEmployeeId}. Attempt ${connAttempt}/${maxConnRetries}: Retrying remote connection in ${backoffMs}ms...`);
+                  await new Promise(resolve => setTimeout(resolve, backoffMs));
+                }
+
+                if (formattedUrl.includes('/playwright')) {
+                  localBrowser = await chromium.connect({ 
+                    wsEndpoint: formattedUrl,
+                    timeout: 20000
+                  });
+                } else {
+                  localBrowser = await chromium.connectOverCDP(formattedUrl, {
+                    timeout: 20000
+                  });
+                }
+                connSuccess = true;
+              } catch (connErr: any) {
+                console.error(`[Browser Connection Attempt ${connAttempt} Failed for ${decryptedEmployeeId}]:`, connErr.message);
+                if (connAttempt >= maxConnRetries) {
+                  throw new Error(`Failed to connect to remote Playwright service for ${decryptedEmployeeId} after ${maxConnRetries} attempts. Last error: ${connErr.message}`);
+                }
+              }
+            }
+          } else {
+            console.log(`Launching local Chromium browser for ${decryptedEmployeeId}...`);
+            localBrowser = await chromium.launch({
+              headless: true,
+              args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+            });
+          }
+
+          context = await localBrowser.newContext({
             viewport: { width: 1280, height: 800 },
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
           });
@@ -634,12 +700,12 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
           ];
 
           const hasDatePattern = datePatterns.some(pat => lowerText.includes(pat));
-          const hasModeKeyword = modeParam === 'login'
+          const hasModeKeyword = resolvedMode === 'login'
             ? /\b(in|login|log in|time in|clock in)\b/i.test(lowerText)
             : /\b(out|logout|log out|time out|clock out)\b/i.test(lowerText);
 
           if (hasDatePattern && hasModeKeyword) {
-            const skipMsg = `Skipped: Today's ${modeText} timelog already exists on the company portal grid.`;
+            const skipMsg = `Skipped: Today's ${resolvedModeText} timelog already exists on the company portal grid.`;
             console.log(`[Double Run Check] ${skipMsg}`);
             success = true;
             return {
@@ -658,15 +724,13 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
 
           // Wait for ASP.NET Postback to finish rendering the form
           console.log('Waiting for form postback to render...');
-          await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-          await page.waitForTimeout(1000); // Small buffer for DOM to become editable
 
           // 3. Inject Form Fields
           // Wait for the update panel/form fields to load
           const typeSelect = 'select[name="ctl00$ContentPlaceHolder1$drp_type"], #ctl00_ContentPlaceHolder1_drp_type';
           await page.waitForSelector(typeSelect, { timeout: 10000 });
 
-          console.log(`Injecting form variables: Date=${formattedDate}, Time=${timeToInject}, Mode=${modeText}`);
+          console.log(`Injecting form variables: Date=${formattedDate}, Time=${timeToInject}, Mode=${resolvedModeText}`);
 
           // Type: "Correction"
           await page.selectOption(typeSelect, { value: 'C' }, { timeout: 5000 }); // 'C' represents "Correction"
@@ -686,7 +750,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
 
           // Mode: 'I' for Log In, 'O' for Log Out
           const modeSelect = 'select[name="ctl00$ContentPlaceHolder1$drp_mode"], #ctl00_ContentPlaceHolder1_drp_mode';
-          const modeValue = modeParam === 'login' ? 'I' : 'O';
+          const modeValue = resolvedMode === 'login' ? 'I' : 'O';
           await page.selectOption(modeSelect, { value: modeValue }, { timeout: 5000 });
 
           // Reason: Dynamic WFH Reason from profile settings
@@ -700,41 +764,49 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
           });
 
           // 4. Click Submit Button
-          console.log('Submitting the timelog form...');
-          const submitBtn = 'input[name="ctl00$ContentPlaceHolder1$Button1"][value="Submit"]';
-          await page.click(submitBtn);
+          if (isDryRun) {
+            console.log(`[Dry Run Mode] Skipping actual submission click on portal for user ${userId}.`);
+          } else {
+            console.log('Submitting the timelog form...');
+            const submitBtn = 'input[name="ctl00$ContentPlaceHolder1$Button1"][value="Submit"]';
+            await page.click(submitBtn);
 
-          // Wait for page postback/completion to register
-          await page.waitForTimeout(3000); 
+            // Wait for page postback/completion to register
+            await page.waitForTimeout(3000); 
+          }
 
-          console.log(`Timelog ${modeText} submission completed successfully for user ${userId}.`);
+          console.log(`Timelog ${resolvedModeText} submission completed successfully for user ${userId}.`);
 
           // Save success status to local DB history
-          try {
-            const { error: insertError } = await supabase
-              .from('timelog_history')
-              .insert({
-                user_id: userId,
-                employee_id: decryptedEmployeeId,
-                mode: modeParam,
-                date: currentDate
-              });
-            if (insertError) {
-              console.warn(`[Database History Update Warning] Failed to insert history record for user ${userId}:`, insertError.message);
-            } else {
-              console.log(`[Database History Update] Successfully recorded submission in database history for user ${userId}.`);
+          if (isDryRun) {
+            console.log(`[Dry Run Mode] Skipping database history record insertion for user ${userId}.`);
+          } else {
+            try {
+              const { error: insertError } = await supabase
+                .from('timelog_history')
+                .insert({
+                  user_id: userId,
+                  employee_id: decryptedEmployeeId,
+                  mode: resolvedMode,
+                  date: currentDate
+                });
+              if (insertError) {
+                console.warn(`[Database History Update Warning] Failed to insert history record for user ${userId}:`, insertError.message);
+              } else {
+                console.log(`[Database History Update] Successfully recorded submission in database history for user ${userId}.`);
+              }
+            } catch (insertErr: any) {
+              console.warn(`[Database History Update Exception] Failed to insert history record:`, insertErr.message);
             }
-          } catch (insertErr: any) {
-            console.warn(`[Database History Update Exception] Failed to insert history record:`, insertErr.message);
           }
 
           let successMessage = '';
           if (matchedEvent && !isExcludedFromEvent) {
-            successMessage = `Successfully submitted timelog ${modeText} for Company Event [${matchedEvent.title}] at ${timeToInject}.`;
+            successMessage = `Successfully submitted timelog ${resolvedModeText} for Company Event [${matchedEvent.title}] at ${timeToInject}.`;
           } else if (hasManualLoginToday) {
-            successMessage = `Successfully submitted automated manual-override timelog ${modeText} due to active morning login at ${timeToInject}.`;
+            successMessage = `Successfully submitted automated manual-override timelog ${resolvedModeText} due to active morning login at ${timeToInject}.`;
           } else {
-            successMessage = `Successfully submitted timelog ${modeText} for WFH day (${currentDay}) at ${timeToInject}.`;
+            successMessage = `Successfully submitted timelog ${resolvedModeText} (${actionReason}) at ${timeToInject}.`;
           }
 
           success = true;
@@ -749,7 +821,10 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
           lastError = browserError;
         } finally {
           if (context) {
-            await context.close();
+            await context.close().catch(() => {});
+          }
+          if (localBrowser) {
+            await localBrowser.close().catch(() => {});
           }
         }
       }
@@ -762,8 +837,8 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       };
     };
 
-    // Process profiles in parallel
-    const results = await Promise.all(profiles.map(processProfile));
+    // Process profiles in parallel to prevent Vercel Serverless timeouts
+    const results = await Promise.all(profiles.map(profile => processProfile(profile)));
 
 
 
@@ -796,10 +871,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
       { status: 500 }
     );
   } finally {
-    if (browser) {
-      await browser.close().catch(() => {});
-      console.log('Successfully closed and released Playwright Browser connection for cron route.');
-    }
+    console.log('Successfully completed cron route execution.');
   }
 }
 

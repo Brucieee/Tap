@@ -75,3 +75,48 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const supabase = await createClient();
+    
+    // Authenticate user session
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized user session.' }, { status: 401 });
+    }
+
+    // Verify user role is admin
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile || profile.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden. Admin privileges required.' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Missing log ID parameter.' }, { status: 400 });
+    }
+
+    const adminClient = createAdminClient();
+    const { error: deleteError } = await adminClient
+      .from('timelog_history')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      return NextResponse.json({ error: 'Failed to delete log.', details: deleteError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, message: 'Log entry deleted successfully.' });
+  } catch (error: any) {
+    console.error('Logs delete error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}

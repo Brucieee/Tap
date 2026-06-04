@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Clock, Calendar, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock, Calendar, CheckCircle, Trash2 } from 'lucide-react';
 import Logo from '@/components/Logo';
 import BatEffect from '@/components/effects/BatEffect';
 
@@ -13,6 +13,29 @@ export default function LogsPage() {
   const [error, setError] = useState('');
   const [triggerBatEffect, setTriggerBatEffect] = useState(false);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteLog = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this log entry?')) {
+      return;
+    }
+    setDeletingId(id);
+    try {
+      const response = await fetch(`/api/logs?id=${id}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        setLogs(prev => prev.filter(log => log.id !== id));
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Failed to delete log.');
+      }
+    } catch (err) {
+      alert('An error occurred while deleting.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const sortedLogs = [...logs].sort((a, b) => {
     const timeA = new Date(a.created_at).getTime();
@@ -150,6 +173,7 @@ export default function LogsPage() {
                     <th style={{ padding: '1.25rem 1rem', color: '#475569', fontWeight: 600 }}>Employee ID</th>
                     <th style={{ padding: '1.25rem 1rem', color: '#475569', fontWeight: 600 }}>Mode</th>
                     <th style={{ padding: '1.25rem 1rem', color: '#475569', fontWeight: 600 }}>Status</th>
+                    <th style={{ padding: '1.25rem 1rem', color: '#475569', fontWeight: 600, textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -181,6 +205,33 @@ export default function LogsPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#16a34a', fontSize: '0.85rem', fontWeight: 500 }}>
                           <CheckCircle style={{ width: '16px', height: '16px' }} /> Success
                         </div>
+                      </td>
+                      <td style={{ padding: '1rem', borderBottom: '1px solid #e2e8f0', textAlign: 'center' }}>
+                        <button
+                          onClick={() => handleDeleteLog(log.id)}
+                          disabled={deletingId === log.id}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            opacity: deletingId === log.id ? 0.5 : 0.8,
+                            transition: 'opacity 0.2s',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                          onMouseLeave={e => e.currentTarget.style.opacity = deletingId === log.id ? '0.5' : '0.8'}
+                          title="Delete Log Entry"
+                        >
+                          {deletingId === log.id ? (
+                            <Loader2 style={{ animation: 'spin 1.5s linear infinite', width: '16px', height: '16px' }} />
+                          ) : (
+                            <Trash2 style={{ width: '16px', height: '16px' }} />
+                          )}
+                        </button>
                       </td>
                     </tr>
                   ))}

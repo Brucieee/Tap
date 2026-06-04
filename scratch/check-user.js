@@ -30,8 +30,8 @@ if (!supabaseUrl || !serviceRoleKey) {
 const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
 async function run() {
-  const userId = '581f44dd-ee1b-4c93-8ead-0d292a994ed5';
-  const currentDate = '2026-06-03';
+  const userId = 'e3b73dad-0162-4137-a670-d9f0114d574c';
+  const currentDate = '2026-06-04';
   
   try {
     console.log(`Checking user: ${userId}`);
@@ -45,6 +45,14 @@ async function run() {
       console.error('Profile query error:', profileError);
     } else {
       console.log('User profile:', JSON.stringify(profile, null, 2));
+    }
+    
+    // Get Auth user details to find email
+    const { data: authUser, error: authUserError } = await adminClient.auth.admin.getUserById(userId);
+    if (authUserError) {
+      console.error('Auth user query error:', authUserError);
+    } else {
+      console.log('Auth user email:', authUser.user.email);
     }
     
     console.log('\nChecking history for today:', currentDate);
@@ -81,6 +89,16 @@ async function run() {
       console.log('Holidays for today:', JSON.stringify(todayHolidays, null, 2));
     }
     
+    // Fetch all Standly profiles to see email mapping
+    const { data: standlyProfiles, error: standlyProfilesError } = await standlyClient
+      .from('profiles')
+      .select('*');
+    if (standlyProfilesError) {
+      console.error('Standly profiles query error:', standlyProfilesError);
+    } else {
+      console.log('All Standly profiles:', JSON.stringify(standlyProfiles.map(p => ({ id: p.id, email: p.email, name: p.full_name })), null, 2));
+    }
+
     // Also check leaves in Standly
     const { data: leaves, error: leavesError } = await standlyClient
       .from('leaves')
