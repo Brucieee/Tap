@@ -670,12 +670,19 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
           
           // Submit Login Form
           console.log('Submitting credentials form...');
-          await Promise.all([
-            page.click('input[name="ctl00$ContentPlaceHolder1$Login1$LoginButton"], #ctl00_ContentPlaceHolder1_Login1_LoginButton', { timeout: 10000 }),
-            page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {
-              console.log('Navigation wait timed out or bypassed, continuing flow...');
-            })
-          ]);
+          await page.click('input[name="ctl00$ContentPlaceHolder1$Login1$LoginButton"], #ctl00_ContentPlaceHolder1_Login1_LoginButton', { timeout: 10000 });
+          
+          console.log('Waiting for login redirection...');
+          await page.waitForURL((url: any) => url.href.includes('/members/Home') || url.href.includes('Home') || url.href.includes('view'), { 
+            waitUntil: 'domcontentloaded', 
+            timeout: 15000 
+          }).catch(async () => {
+            console.log('waitForURL timed out, checking/forcing navigation to Home page...');
+            const currentUrl = page.url();
+            if (!currentUrl.includes('/members/Home') && !currentUrl.includes('Home')) {
+              await page.goto('https://timelog.cocogen.com.ph/members/Home', { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+            }
+          });
 
           console.log('Logged in successfully. Waiting for dashboard state...');
 

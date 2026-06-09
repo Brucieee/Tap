@@ -153,19 +153,19 @@ export async function GET(request: NextRequest) {
     await page.fill('input[name="ctl00$ContentPlaceHolder1$Login1$Password"], #ctl00_ContentPlaceHolder1_Login1_Password', decryptedPassword, { timeout: 10000 });
     
     console.log('Submitting credentials form in scraper...');
-    await Promise.all([
-      page.click('input[name="ctl00$ContentPlaceHolder1$Login1$LoginButton"], #ctl00_ContentPlaceHolder1_Login1_LoginButton', { timeout: 10000 }),
-      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {
-        console.log('Navigation wait timed out, continuing flow...');
-      })
-    ]);
-
-    // Ensure we are on the members Home page
-    const currentUrl = page.url();
-    if (!currentUrl.includes('/members/Home') && !currentUrl.includes('Home')) {
-      console.log(`Redirecting/Navigating to members home page: ${currentUrl}`);
-      await page.goto('https://timelog.cocogen.com.ph/members/Home', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
-    }
+    await page.click('input[name="ctl00$ContentPlaceHolder1$Login1$LoginButton"], #ctl00_ContentPlaceHolder1_Login1_LoginButton', { timeout: 10000 });
+    
+    console.log('Waiting for portal dashboard/home page to load...');
+    await page.waitForURL((url: any) => url.href.includes('/members/Home') || url.href.includes('Home'), {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000
+    }).catch(async () => {
+      console.log('waitForURL timed out, checking/forcing navigation to Home page...');
+      const currentUrl = page.url();
+      if (!currentUrl.includes('/members/Home') && !currentUrl.includes('Home')) {
+        await page.goto('https://timelog.cocogen.com.ph/members/Home', { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+      }
+    });
 
     // 5. Scrape all tables on the page
     console.log('Extracting tables and rows from portal home page...');
@@ -546,10 +546,15 @@ export async function DELETE(request: NextRequest) {
     await page.fill('input[name="ctl00$ContentPlaceHolder1$Login1$Password"], #ctl00_ContentPlaceHolder1_Login1_Password', decryptedPassword, { timeout: 10000 });
     
     console.log('Submitting credentials form in manual deletion...');
-    await Promise.all([
-      page.click('input[name="ctl00$ContentPlaceHolder1$Login1$LoginButton"], #ctl00_ContentPlaceHolder1_Login1_LoginButton', { timeout: 10000 }),
-      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {})
-    ]);
+    await page.click('input[name="ctl00$ContentPlaceHolder1$Login1$LoginButton"], #ctl00_ContentPlaceHolder1_Login1_LoginButton', { timeout: 10000 });
+    
+    console.log('Waiting for login redirection in manual deletion...');
+    await page.waitForURL((url: any) => !url.href.includes('/Login') && !url.href.includes('Login'), {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000
+    }).catch(() => {
+      console.log('Login redirection wait timed out, proceeding to view page anyway...');
+    });
 
     const viewUrl = `https://timelog.cocogen.com.ph/members/view?docno=${docNo}`;
     console.log(`Manual deletion navigating to view page: ${viewUrl}`);

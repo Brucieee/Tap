@@ -529,19 +529,28 @@ export default function DashboardPage() {
                 
               if (dbHistory && dbHistory.length > 0) {
                 const storageKey = `notified-automations-${activeUserId}`;
-                const notifiedStr = localStorage.getItem(storageKey) || '[]';
+                const notifiedStr = localStorage.getItem(storageKey);
                 let notifiedList: string[] = [];
-                try {
-                  notifiedList = JSON.parse(notifiedStr);
-                } catch (e) {
-                  notifiedList = [];
+                let isFirstTime = false;
+                
+                if (notifiedStr === null) {
+                  isFirstTime = true;
+                } else {
+                  try {
+                    notifiedList = JSON.parse(notifiedStr);
+                  } catch (e) {
+                    notifiedList = [];
+                  }
                 }
                 
                 let updated = false;
                 
                 dbHistory.forEach((hist: any) => {
                   const histKey = `${hist.date}-${hist.mode}`; // e.g. "2026-06-01-login"
-                  if (!notifiedList.includes(histKey)) {
+                  if (isFirstTime) {
+                    notifiedList.push(histKey);
+                    updated = true;
+                  } else if (!notifiedList.includes(histKey)) {
                     // This was successfully automated and we haven't notified the user yet!
                     const modeLabel = hist.mode === 'login' ? 'Time In' : 'Time Out';
                     addToast(`${modeLabel} Automated`, `Successfully automated missed ${modeLabel} for workday ${hist.date}!`, hist.date, 'success');

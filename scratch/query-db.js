@@ -1,8 +1,8 @@
 const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
+const path = require('path');
 
-// Manually parse .env.local
-const envPath = 'c:/Users/Bruce/Downloads/Tap/.env.local';
+const envPath = path.join(__dirname, '../.env.local');
 const envContent = fs.readFileSync(envPath, 'utf8');
 const env = {};
 envContent.split('\n').forEach(line => {
@@ -40,11 +40,12 @@ async function run() {
     })), null, 2));
   }
 
-  console.log('\n--- Fetching Timelog History for 2026-06-03 ---');
+  console.log('\n--- Fetching Timelog History ---');
   const { data: history, error: err2 } = await supabase
     .from('timelog_history')
     .select('*')
-    .eq('date', '2026-06-03');
+    .order('created_at', { ascending: false })
+    .limit(10);
   if (err2) {
     console.error('Error history:', err2);
   } else {
