@@ -227,10 +227,21 @@ export async function GET(request: NextRequest) {
       }
 
       // Status cell (Approved, Pending, Submitted, etc.)
-      let statusVal = 'Submitted';
-      const statusCell = row.find((cell: string) => /\b(approved|pending|cancel|rejected|submitted|active)\b/i.test(cell));
-      if (statusCell) {
-        statusVal = statusCell;
+      let statusVal = 'Pending Approval';
+      if (row.length >= 6) {
+        const rawStatus = row[5].trim();
+        if (rawStatus === 'A') {
+          statusVal = 'Approved';
+        } else if (rawStatus === '1') {
+          statusVal = 'Pending Approval';
+        } else {
+          statusVal = rawStatus;
+        }
+      } else {
+        const statusCell = row.find((cell: string) => /\b(approved|pending|cancel|rejected|submitted|active)\b/i.test(cell));
+        if (statusCell) {
+          statusVal = statusCell;
+        }
       }
 
       // Isolate date and time parts if they contain concatenated timestamps
@@ -376,9 +387,20 @@ export async function GET(request: NextRequest) {
         const timeCell = row.find((cell: string) => /\b\d{1,2}:\d{2}(:\d{2})?(\s?[AP]M)?\b/i.test(cell));
         if (timeCell) timeVal = timeCell;
 
-        let statusVal = 'Submitted';
-        const statusCell = row.find((cell: string) => /\b(approved|pending|cancel|rejected|submitted|active)\b/i.test(cell));
-        if (statusCell) statusVal = statusCell;
+        let statusVal = 'Pending Approval';
+        if (row.length >= 6) {
+          const rawStatus = row[5].trim();
+          if (rawStatus === 'A') {
+            statusVal = 'Approved';
+          } else if (rawStatus === '1') {
+            statusVal = 'Pending Approval';
+          } else {
+            statusVal = rawStatus;
+          }
+        } else {
+          const statusCell = row.find((cell: string) => /\b(approved|pending|cancel|rejected|submitted|active)\b/i.test(cell));
+          if (statusCell) statusVal = statusCell;
+        }
 
         let cleanDate = dateVal.trim();
         let cleanTime = timeVal.trim();
@@ -560,13 +582,28 @@ export async function DELETE(request: NextRequest) {
     console.log(`Manual deletion navigating to view page: ${viewUrl}`);
     await page.goto(viewUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
+    const deleteBtn = '#ctl00_ContentPlaceHolder1_Button1, input[name="ctl00$ContentPlaceHolder1$Button1"][value="Delete"]';
+    let deleteBtnExists = false;
+    try {
+      await page.waitForSelector(deleteBtn, { timeout: 3000 });
+      deleteBtnExists = true;
+    } catch (err) {
+      console.log('Delete button selector timeout (3000ms). Checking page status/text...');
+    }
+
+    if (!deleteBtnExists) {
+      const pageText = await page.innerText('body').catch(() => '');
+      if (pageText.includes('Approved') || pageText.includes('APPROVED')) {
+        return NextResponse.json({ error: 'This timelog record is already approved and cannot be deleted.' }, { status: 400 });
+      }
+      return NextResponse.json({ error: 'Delete button not found on the portal. The record might be approved or already deleted.' }, { status: 400 });
+    }
+
     page.once('dialog', async (dialog: any) => {
       console.log(`Accepting manual deletion dialog: ${dialog.message()}`);
       await dialog.accept().catch(() => {});
     });
 
-    const deleteBtn = '#ctl00_ContentPlaceHolder1_Button1, input[name="ctl00$ContentPlaceHolder1$Button1"][value="Delete"]';
-    await page.waitForSelector(deleteBtn, { timeout: 10000 });
     await Promise.all([
       page.click(deleteBtn),
       page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {})

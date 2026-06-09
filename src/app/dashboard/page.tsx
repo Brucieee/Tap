@@ -620,7 +620,11 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeletePortalLog = async (docNo: string) => {
+  const handleDeletePortalLog = async (docNo: string, status?: string) => {
+    if (status === 'Approved') {
+      addToast('Deletion Blocked', 'Cannot delete an approved timelog record.', 'delete', 'failed');
+      return;
+    }
     if (!confirm('Are you sure you want to delete this timelog record from the portal?')) {
       return;
     }
@@ -2489,7 +2493,7 @@ export default function DashboardPage() {
                         <tbody>
                           {portalLogs.map((log, index) => {
                             const isTimeIn = log.mode.toLowerCase().includes('in');
-                            const isApproved = log.status.toLowerCase().includes('approved') || log.status.toLowerCase().includes('active');
+                            const isApproved = log.status.toLowerCase() === 'approved' || log.status.toLowerCase() === 'active';
                             
                             return (
                               <tr key={index} style={{ borderBottom: index === portalLogs.length - 1 ? 'none' : '1px solid #f1f5f9', backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa' }}>
@@ -2518,8 +2522,9 @@ export default function DashboardPage() {
                                     fontWeight: 700,
                                     padding: '2px 8px',
                                     borderRadius: '999px',
-                                    backgroundColor: isApproved ? '#e0f2fe' : '#fef3c7',
-                                    color: isApproved ? '#0369a1' : '#d97706'
+                                    backgroundColor: isApproved ? 'rgba(22, 163, 74, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                                    border: isApproved ? '1px solid rgba(22, 163, 74, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
+                                    color: isApproved ? '#16a34a' : '#ef4444'
                                   }}>
                                     {log.status}
                                   </span>
@@ -2531,22 +2536,29 @@ export default function DashboardPage() {
                                   {log.docNo ? (
                                     <button
                                       type="button"
-                                      onClick={() => handleDeletePortalLog(log.docNo)}
-                                      disabled={deletingDocNo !== null}
+                                      onClick={() => handleDeletePortalLog(log.docNo, log.status)}
+                                      disabled={deletingDocNo !== null || isApproved}
                                       style={{
-                                        background: deletingDocNo === log.docNo ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)',
-                                        border: '1px solid rgba(239, 68, 68, 0.2)',
-                                        color: '#ef4444',
+                                        background: isApproved 
+                                          ? 'rgba(148, 163, 184, 0.05)'
+                                          : deletingDocNo === log.docNo 
+                                            ? 'rgba(239, 68, 68, 0.1)' 
+                                            : 'rgba(239, 68, 68, 0.05)',
+                                        border: isApproved
+                                          ? '1px solid rgba(148, 163, 184, 0.1)'
+                                          : '1px solid rgba(239, 68, 68, 0.2)',
+                                        color: isApproved ? '#94a3b8' : '#ef4444',
                                         borderRadius: '6px',
                                         fontSize: '0.7rem',
                                         fontWeight: 700,
                                         padding: '4px 8px',
-                                        cursor: deletingDocNo !== null ? 'not-allowed' : 'pointer',
+                                        cursor: (deletingDocNo !== null || isApproved) ? 'not-allowed' : 'pointer',
                                         transition: 'all 0.2s',
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         gap: '4px'
                                       }}
+                                      title={isApproved ? "Approved logs cannot be deleted" : "Delete Log"}
                                     >
                                       {deletingDocNo === log.docNo ? (
                                         <>

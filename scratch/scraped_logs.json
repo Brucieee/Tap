@@ -3,7 +3,7 @@
     "date": "6/8/2026",
     "time": "5:00 PM",
     "mode": "Time Out",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002683949",
     "raw": [
       "0002683949",
@@ -18,7 +18,7 @@
     "date": "6/8/2026",
     "time": "8:00 AM",
     "mode": "Time In",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002683548",
     "raw": [
       "0002683548",
@@ -33,7 +33,7 @@
     "date": "6/5/2026",
     "time": "5:00 PM",
     "mode": "Time Out",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002682945",
     "raw": [
       "0002682945",
@@ -48,7 +48,7 @@
     "date": "5/29/2026",
     "time": "5:00 PM",
     "mode": "Time Out",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002682789",
     "raw": [
       "0002682789",
@@ -63,7 +63,7 @@
     "date": "5/29/2026",
     "time": "8:00 AM",
     "mode": "Time In",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002682783",
     "raw": [
       "0002682783",
@@ -78,7 +78,7 @@
     "date": "6/5/2026",
     "time": "8:00 AM",
     "mode": "Time In",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002682344",
     "raw": [
       "0002682344",
@@ -93,7 +93,7 @@
     "date": "6/4/2026",
     "time": "5:00 PM",
     "mode": "Time Out",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002681897",
     "raw": [
       "0002681897",
@@ -108,7 +108,7 @@
     "date": "6/4/2026",
     "time": "1:00 PM",
     "mode": "Time In",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002681668",
     "raw": [
       "0002681668",
@@ -123,7 +123,7 @@
     "date": "6/3/2026",
     "time": "5:00 PM",
     "mode": "Time Out",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002681091",
     "raw": [
       "0002681091",
@@ -138,7 +138,7 @@
     "date": "6/3/2026",
     "time": "8:00 AM",
     "mode": "Time In",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002680745",
     "raw": [
       "0002680745",
@@ -153,7 +153,7 @@
     "date": "6/1/2026",
     "time": "5:00 PM",
     "mode": "Time Out",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002679922",
     "raw": [
       "0002679922",
@@ -168,7 +168,7 @@
     "date": "6/1/2026",
     "time": "8:00 AM",
     "mode": "Time In",
-    "status": "Submitted",
+    "status": "Pending Approval",
     "docNo": "0002679920",
     "raw": [
       "0002679920",
@@ -183,7 +183,7 @@
     "date": "5/25/2026",
     "time": "5:00 PM",
     "mode": "Time Out",
-    "status": "Submitted",
+    "status": "Approved",
     "docNo": "0002676634",
     "raw": [
       "0002676634",
@@ -198,7 +198,7 @@
     "date": "5/25/2026",
     "time": "8:00 AM",
     "mode": "Time In",
-    "status": "Submitted",
+    "status": "Approved",
     "docNo": "0002676374",
     "raw": [
       "0002676374",
