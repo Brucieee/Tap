@@ -127,20 +127,30 @@ export async function GET(request: NextRequest) {
           console.error(`[Scraper Browser Connection Attempt ${connAttempt} Failed]:`, connErr.message);
           if (connAttempt >= maxConnRetries) {
             console.warn('Fallback: remote Playwright service is unreachable. Launching local Chromium browser for scraper...');
-            browser = await chromium.launch({
-              headless: true,
-              args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-            });
-            connSuccess = true;
+            try {
+              browser = await chromium.launch({
+                headless: true,
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+              });
+              connSuccess = true;
+            } catch (localLaunchErr: any) {
+              console.error('Local chromium launch fallback failed:', localLaunchErr.message);
+              throw new Error(`The remote browser service (Browserless/Playwright) is currently unavailable or has reached its usage limit, and local browser execution is not supported on Vercel. Details: ${connErr.message}`);
+            }
           }
         }
       }
     } else {
       console.log('Launching local Chromium browser for scraper...');
-      browser = await chromium.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-      });
+      try {
+        browser = await chromium.launch({
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        });
+      } catch (localLaunchErr: any) {
+        console.error('Local chromium launch failed:', localLaunchErr.message);
+        throw new Error(`Local browser execution is not supported in the current serverless environment. Please configure PLAYWRIGHT_SERVICE_URL with a valid remote browser service endpoint. Details: ${localLaunchErr.message}`);
+      }
     }
 
     context = await browser!.newContext({
@@ -555,17 +565,27 @@ export async function DELETE(request: NextRequest) {
       } catch (connErr: any) {
         console.error('Failed to connect to remote Playwright service for manual deletion:', connErr.message);
         console.warn('Fallback: Launching local Chromium browser...');
+        try {
+          browser = await chromium.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+          });
+        } catch (localLaunchErr: any) {
+          console.error('Local chromium launch fallback failed:', localLaunchErr.message);
+          throw new Error(`The remote browser service (Browserless/Playwright) is currently unavailable or has reached its usage limit, and local browser execution is not supported on Vercel. Details: ${connErr.message}`);
+        }
+      }
+    } else {
+      console.log('Launching local Chromium browser for manual deletion...');
+      try {
         browser = await chromium.launch({
           headless: true,
           args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         });
+      } catch (localLaunchErr: any) {
+        console.error('Local chromium launch failed:', localLaunchErr.message);
+        throw new Error(`Local browser execution is not supported in the current serverless environment. Please configure PLAYWRIGHT_SERVICE_URL with a valid remote browser service endpoint. Details: ${localLaunchErr.message}`);
       }
-    } else {
-      console.log('Launching local Chromium browser for manual deletion...');
-      browser = await chromium.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-      });
     }
 
     context = await browser!.newContext({
