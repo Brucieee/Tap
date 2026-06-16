@@ -274,6 +274,7 @@ export default function DashboardPage() {
   const [calendarMonthOffset, setCalendarMonthOffset] = useState<number>(0);
   const [recoveryStatus, setRecoveryStatus] = useState<{ date: string; modeLabel: string; state: 'running' | 'success' | 'failed' } | null>(null);
   const [deletingDocNo, setDeletingDocNo] = useState<string | null>(null);
+  const [hasTriggeredInitialLogs, setHasTriggeredInitialLogs] = useState(false);
   const attemptedRecoveriesRef = useRef<Set<string>>(new Set());
   const autoSyncInitiatedRef = useRef<Record<string, boolean>>({});
   const autoDeleteInitiatedRef = useRef<Record<string, boolean>>({});
@@ -415,6 +416,70 @@ export default function DashboardPage() {
       handleDeleteMyPortalLeave(deletedStandlyLeave.docNo);
     }
   }, [leaves, myPortalLeaves, loadingMyPortalLeaves, loadingStandly, syncingLeaveId, deletingLeaveDocNo, profile]);
+
+  // Coordinator: Ensures leaves are fully reconciled before loading log history
+  useEffect(() => {
+    if (hasTriggeredInitialLogs) return;
+    if (loading || loadingStandly) return;
+
+    const passwordPresent = !!profile?.company_password;
+    const myportalPresent = !!profile?.myportal_password && profile.myportal_password !== '';
+
+    if (myportalPresent && loadingMyPortalLeaves) return;
+    if (syncingLeaveId !== null || deletingLeaveDocNo !== null) return;
+
+    if (myportalPresent) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const activeLeaves = leaves.filter((leave: any) => {
+        const startDate = new Date(leave.start_date);
+        startDate.setHours(0, 0, 0, 0);
+        return startDate >= today;
+      });
+
+      const hasUnsynced = activeLeaves.some((leave: any) => {
+        const isMatched = myPortalLeaves.some((mpl: any) => {
+          return mpl.startDate === leave.start_date && mpl.endDate === leave.end_date && mpl.status.toLowerCase() !== 'deleted' && mpl.status.toLowerCase() !== 'rejected';
+        });
+        return !isMatched && !autoSyncInitiatedRef.current[leave.id];
+      });
+
+      const activeMyPortalLeaves = myPortalLeaves.filter((mpl: any) => {
+        const startDate = new Date(mpl.startDate);
+        startDate.setHours(0, 0, 0, 0);
+        return mpl.status.toLowerCase() === 'pending' && startDate >= today;
+      });
+
+      const hasDeleted = activeMyPortalLeaves.some((mpl: any) => {
+        const existsInStandly = leaves.some((leave: any) => {
+          return leave.start_date === mpl.startDate && leave.end_date === mpl.endDate;
+        });
+        return !existsInStandly && mpl.docNo && !autoDeleteInitiatedRef.current[mpl.docNo];
+      });
+
+      if (hasUnsynced || hasDeleted) {
+        console.log('Coordinator: Mismatch detected. Postponing initial portal logs fetch until sync completes.');
+        return;
+      }
+    }
+
+    setHasTriggeredInitialLogs(true);
+    if (passwordPresent) {
+      console.log('Coordinator: No mismatches or syncs pending. Triggering initial portal logs fetch.');
+      handleSyncPortalLogs(profile.wfh_days || [], profile.is_automation_enabled !== undefined ? profile.is_automation_enabled : true);
+    }
+  }, [
+    loading,
+    loadingStandly,
+    loadingMyPortalLeaves,
+    leaves,
+    myPortalLeaves,
+    syncingLeaveId,
+    deletingLeaveDocNo,
+    profile,
+    hasTriggeredInitialLogs
+  ]);
 
   const router = useRouter();
   const supabase = createClient();
@@ -837,9 +902,6 @@ export default function DashboardPage() {
              wfh_offsets: data.wfh_offsets || {}
            });
 
-          if (passwordPresent) {
-            handleSyncPortalLogs(data.wfh_days || [], data.is_automation_enabled !== undefined ? data.is_automation_enabled : true);
-          }
           if (myportalPasswordPresent) {
             fetchMyPortalLeaves();
           }
