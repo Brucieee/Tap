@@ -50,7 +50,12 @@ async function getBrowserInstance() {
       } catch (connErr: any) {
         console.error(`Browser connection attempt ${connAttempt} failed:`, connErr.message);
         if (connAttempt >= maxConnRetries) {
-          throw connErr;
+          console.warn('Fallback: remote Playwright service is unreachable (limit reached or down). Launching local Chromium browser...');
+          browser = await chromium.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+          });
+          connSuccess = true;
         }
       }
     }

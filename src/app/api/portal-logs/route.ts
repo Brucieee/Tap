@@ -126,7 +126,12 @@ export async function GET(request: NextRequest) {
         } catch (connErr: any) {
           console.error(`[Scraper Browser Connection Attempt ${connAttempt} Failed]:`, connErr.message);
           if (connAttempt >= maxConnRetries) {
-            return NextResponse.json({ error: `Browser service unreachable after ${maxConnRetries} attempts: ${connErr.message}` }, { status: 502 });
+            console.warn('Fallback: remote Playwright service is unreachable. Launching local Chromium browser for scraper...');
+            browser = await chromium.launch({
+              headless: true,
+              args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+            });
+            connSuccess = true;
           }
         }
       }
@@ -541,10 +546,19 @@ export async function DELETE(request: NextRequest) {
       }
 
       console.log('Connecting to remote Playwright service for manual deletion...');
-      if (formattedUrl.includes('/playwright')) {
-        browser = await chromium.connect({ wsEndpoint: formattedUrl, timeout: 20000 });
-      } else {
-        browser = await chromium.connectOverCDP(formattedUrl, { timeout: 20000 });
+      try {
+        if (formattedUrl.includes('/playwright')) {
+          browser = await chromium.connect({ wsEndpoint: formattedUrl, timeout: 20000 });
+        } else {
+          browser = await chromium.connectOverCDP(formattedUrl, { timeout: 20000 });
+        }
+      } catch (connErr: any) {
+        console.error('Failed to connect to remote Playwright service for manual deletion:', connErr.message);
+        console.warn('Fallback: Launching local Chromium browser...');
+        browser = await chromium.launch({
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        });
       }
     } else {
       console.log('Launching local Chromium browser for manual deletion...');

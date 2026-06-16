@@ -641,7 +641,12 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
               } catch (connErr: any) {
                 console.error(`[Browser Connection Attempt ${connAttempt} Failed for ${decryptedEmployeeId}]:`, connErr.message);
                 if (connAttempt >= maxConnRetries) {
-                  throw new Error(`Failed to connect to remote Playwright service for ${decryptedEmployeeId} after ${maxConnRetries} attempts. Last error: ${connErr.message}`);
+                  console.warn(`Fallback: remote Playwright service is unreachable. Launching local Chromium browser for ${decryptedEmployeeId}...`);
+                  localBrowser = await chromium.launch({
+                    headless: true,
+                    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+                  });
+                  connSuccess = true;
                 }
               }
             }
