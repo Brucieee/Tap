@@ -275,6 +275,7 @@ export default function DashboardPage() {
   const [recoveryStatus, setRecoveryStatus] = useState<{ date: string; modeLabel: string; state: 'running' | 'success' | 'failed' } | null>(null);
   const [deletingDocNo, setDeletingDocNo] = useState<string | null>(null);
   const [hasTriggeredInitialLogs, setHasTriggeredInitialLogs] = useState(false);
+  const [hasLoadedMyPortalLeaves, setHasLoadedMyPortalLeaves] = useState(false);
   const attemptedRecoveriesRef = useRef<Set<string>>(new Set());
   const autoSyncInitiatedRef = useRef<Record<string, boolean>>({});
   const autoDeleteInitiatedRef = useRef<Record<string, boolean>>({});
@@ -301,6 +302,7 @@ export default function DashboardPage() {
       console.error('Failed to fetch MyPortal leaves:', err);
     } finally {
       setLoadingMyPortalLeaves(false);
+      setHasLoadedMyPortalLeaves(true);
     }
   };
 
@@ -427,7 +429,8 @@ export default function DashboardPage() {
     const passwordPresent = !!profile?.company_password;
     const myportalPresent = !!profile?.myportal_password && profile.myportal_password !== '';
 
-    if (myportalPresent && loadingMyPortalLeaves) return;
+    // If they have myportal credentials, we MUST wait for the initial MyPortal leaves fetch to complete
+    if (myportalPresent && !hasLoadedMyPortalLeaves) return;
     if (syncingLeaveId !== null || deletingLeaveDocNo !== null) return;
 
     if (myportalPresent) {
@@ -474,7 +477,7 @@ export default function DashboardPage() {
   }, [
     loading,
     loadingStandly,
-    loadingMyPortalLeaves,
+    hasLoadedMyPortalLeaves,
     leaves,
     myPortalLeaves,
     syncingLeaveId,
