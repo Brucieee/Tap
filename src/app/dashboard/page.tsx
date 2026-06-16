@@ -447,7 +447,7 @@ export default function DashboardPage() {
         const isMatched = myPortalLeaves.some((mpl: any) => {
           return mpl.startDate === leave.start_date && mpl.endDate === leave.end_date && mpl.status.toLowerCase() !== 'deleted' && mpl.status.toLowerCase() !== 'rejected';
         });
-        return !isMatched && !autoSyncInitiatedRef.current[leave.id];
+        return !isMatched;
       });
 
       const activeMyPortalLeaves = myPortalLeaves.filter((mpl: any) => {
@@ -460,7 +460,7 @@ export default function DashboardPage() {
         const existsInStandly = leaves.some((leave: any) => {
           return leave.start_date === mpl.startDate && leave.end_date === mpl.endDate;
         });
-        return !existsInStandly && mpl.docNo && !autoDeleteInitiatedRef.current[mpl.docNo];
+        return !existsInStandly && mpl.docNo;
       });
 
       if (hasUnsynced || hasDeleted) {
