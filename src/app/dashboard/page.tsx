@@ -356,7 +356,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     // Only auto-sync if we have MyPortal credentials loaded
-    if (!profile?.myportal_employee_id || !profile?.myportal_password || profile.myportal_password === '' || profile.myportal_password === '__PRESERVED_PASSWORD__') {
+    if (!profile?.myportal_employee_id || !profile?.myportal_password || profile.myportal_password === '') {
       return;
     }
     // Skip if we are currently fetching, loading, syncing, or deleting to avoid browser automation conflicts
@@ -364,14 +364,15 @@ export default function DashboardPage() {
       return;
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const thresholdDate = new Date();
+    thresholdDate.setDate(thresholdDate.getDate() - 30); // Allow up to 30 days in the past for retroactive/late filings
+    thresholdDate.setHours(0, 0, 0, 0);
 
-    // Filter active leaves (same logic as used in UI rendering)
+    // Filter active leaves (same logic as used in UI rendering, plus recent past leaves)
     const activeLeaves = leaves.filter((leave: any) => {
       const endDate = new Date(leave.end_date);
       endDate.setHours(23, 59, 59, 999);
-      return endDate >= today;
+      return endDate >= thresholdDate;
     });
 
     // 1. Find the first unsynced active leave to upload/submit
