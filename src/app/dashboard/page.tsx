@@ -322,6 +322,7 @@ export default function DashboardPage() {
       });
       if (res.ok) {
         addToast('Synced', `Successfully synced leave to MyPortal!`, 'sync', 'success');
+        setHasTriggeredInitialLogs(true);
         fetchMyPortalLeaves();
         handleSyncPortalLogs(undefined, undefined, 1, true);
       } else {
@@ -344,6 +345,7 @@ export default function DashboardPage() {
       });
       if (res.ok) {
         addToast('Deleted', `Successfully deleted leave ${docNo} on MyPortal!`, 'sync', 'success');
+        setHasTriggeredInitialLogs(true);
         fetchMyPortalLeaves();
         handleSyncPortalLogs(undefined, undefined, 1, true);
       } else {
