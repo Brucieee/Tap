@@ -370,18 +370,13 @@ export default function DashboardPage() {
     if (loadingMyPortalLeaves || loadingStandly || syncingLeaveId !== null || deletingLeaveDocNo !== null) {
       return;
     }
+    const todayStr = new Date().toLocaleDateString('en-CA');
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Filter active leaves (only sync leaves starting today or in the future)
     const activeLeaves = leaves.filter((leave: any) => {
-      const startDate = new Date(leave.start_date);
-      startDate.setHours(0, 0, 0, 0);
-      return startDate >= today;
+      return leave.start_date >= todayStr;
     });
 
-    // 1. Find the first unsynced active leave to upload/submit
+    // 1. Find the first unsynced leave to upload/submit
     const unsyncedLeave = activeLeaves.find((leave: any) => {
       const isMatched = myPortalLeaves.some((mpl: any) => {
         return mpl.startDate === leave.start_date && mpl.endDate === leave.end_date && mpl.status.toLowerCase() !== 'deleted' && mpl.status.toLowerCase() !== 'rejected';
@@ -401,9 +396,7 @@ export default function DashboardPage() {
     // We only target 'Pending' leaves since Approved leaves cannot be deleted.
     // We only target 'Pending' leaves starting today or in the future
     const activeMyPortalLeaves = myPortalLeaves.filter((mpl: any) => {
-      const startDate = new Date(mpl.startDate);
-      startDate.setHours(0, 0, 0, 0);
-      return mpl.status.toLowerCase() === 'pending' && startDate >= today;
+      return mpl.status.toLowerCase() === 'pending' && mpl.startDate >= todayStr;
     });
 
     const deletedStandlyLeave = activeMyPortalLeaves.find((mpl: any) => {
@@ -434,13 +427,10 @@ export default function DashboardPage() {
     if (syncingLeaveId !== null || deletingLeaveDocNo !== null) return;
 
     if (myportalPresent) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const todayStr = new Date().toLocaleDateString('en-CA');
 
       const activeLeaves = leaves.filter((leave: any) => {
-        const startDate = new Date(leave.start_date);
-        startDate.setHours(0, 0, 0, 0);
-        return startDate >= today;
+        return leave.start_date >= todayStr;
       });
 
       const hasUnsynced = activeLeaves.some((leave: any) => {
@@ -451,9 +441,7 @@ export default function DashboardPage() {
       });
 
       const activeMyPortalLeaves = myPortalLeaves.filter((mpl: any) => {
-        const startDate = new Date(mpl.startDate);
-        startDate.setHours(0, 0, 0, 0);
-        return mpl.status.toLowerCase() === 'pending' && startDate >= today;
+        return mpl.status.toLowerCase() === 'pending' && mpl.startDate >= todayStr;
       });
 
       const hasDeleted = activeMyPortalLeaves.some((mpl: any) => {
