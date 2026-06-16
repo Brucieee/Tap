@@ -589,7 +589,36 @@ export async function DELETE(request: NextRequest) {
     if (await deleteBtn.count() > 0) {
       console.log('Clicking delete/confirm button...');
       await deleteBtn.click();
-      await page.waitForTimeout(3000); // Allow server to register deletion
+      
+      // Wait for deletion confirmation / redirection back to requests summary
+      let deleteSuccess = false;
+      for (let attempt = 0; attempt < 40; attempt++) {
+        await page.waitForTimeout(500);
+        const currentUrl = page.url();
+        if (currentUrl.includes('myp_reqs.aspx')) {
+          deleteSuccess = true;
+          break;
+        }
+        try {
+          const bodyText = await page.innerText('body');
+          if (bodyText.toLowerCase().includes('deleted successfully') || 
+              bodyText.toLowerCase().includes('successfully deleted') ||
+              bodyText.toLowerCase().includes('no request found') ||
+              bodyText.toLowerCase().includes('request has been deleted') ||
+              bodyText.toLowerCase().includes('record deleted')) {
+            deleteSuccess = true;
+            break;
+          }
+        } catch (err) {
+          // Ignore read errors
+        }
+      }
+      
+      if (!deleteSuccess) {
+        console.warn('Deletion verification did not redirect or show success page within 20s. Proceeding with caution.');
+      } else {
+        console.log('Deletion verified successfully!');
+      }
     } else {
       console.warn('Delete button not found. Assuming already deleted or not permitted.');
       throw new Error('Could not find the delete button on the portal delete page.');
