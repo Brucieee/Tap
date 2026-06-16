@@ -322,6 +322,7 @@ export default function DashboardPage() {
       if (res.ok) {
         addToast('Synced', `Successfully synced leave to MyPortal!`, 'sync', 'success');
         fetchMyPortalLeaves();
+        handleSyncPortalLogs(undefined, undefined, 1, true);
       } else {
         const errorData = await res.json();
         addToast('Error', errorData.error || 'Failed to sync to MyPortal.', 'sync', 'failed');
@@ -343,6 +344,7 @@ export default function DashboardPage() {
       if (res.ok) {
         addToast('Deleted', `Successfully deleted leave ${docNo} on MyPortal!`, 'sync', 'success');
         fetchMyPortalLeaves();
+        handleSyncPortalLogs(undefined, undefined, 1, true);
       } else {
         const errorData = await res.json();
         addToast('Error', errorData.error || 'Failed to delete on MyPortal.', 'sync', 'failed');
