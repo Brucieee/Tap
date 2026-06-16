@@ -281,6 +281,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   let browser: any = null;
   let context: any = null;
+  let page: any = null;
 
   try {
     const body = await request.json();
@@ -324,7 +325,7 @@ export async function POST(request: NextRequest) {
       viewport: { width: 1280, height: 800 },
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     });
-    const page = await context.newPage();
+    page = await context.newPage();
 
     await loginToMyPortal(page, decryptedEmployeeId, decryptedPassword);
 
@@ -442,12 +443,24 @@ export async function POST(request: NextRequest) {
         break;
       }
       
+      // Check for success text anywhere in the body
+      try {
+        const bodyText = await page.innerText('body');
+        if (bodyText.toLowerCase().includes('successfully submitted') || 
+            bodyText.toLowerCase().includes('application request was successfully submitted')) {
+          success = true;
+          break;
+        }
+      } catch (bodyErr) {
+        console.warn('Failed to read body text:', bodyErr);
+      }
+
       // Check for error text in the message label
       const messageLabel = page.locator('#ctl00_MainPlaceHolder_newapp1_MessageLabel').first();
       if (await messageLabel.count() > 0) {
         const msg = await messageLabel.innerText();
         if (msg.trim()) {
-          if (msg.toLowerCase().includes('success') || msg.toLowerCase().includes('saved') || msg.toLowerCase().includes('filed')) {
+          if (msg.toLowerCase().includes('success') || msg.toLowerCase().includes('saved') || msg.toLowerCase().includes('filed') || msg.toLowerCase().includes('submitted')) {
             success = true;
             break;
           } else {
@@ -476,6 +489,14 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error filing leave on MyPortal:', error);
+    if (page) {
+      try {
+        await page.screenshot({ path: 'error_screenshot.png', fullPage: true });
+        console.log('Saved error screenshot to error_screenshot.png');
+      } catch (screenshotErr) {
+        console.error('Failed to capture error screenshot:', screenshotErr);
+      }
+    }
     if (browser) await browser.close().catch(() => {});
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
