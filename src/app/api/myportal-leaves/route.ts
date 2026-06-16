@@ -372,7 +372,8 @@ export async function POST(request: NextRequest) {
     const typeDropdown = page.locator('#ctl00_MainPlaceHolder_newapp1_trans_dd, select[name*="trans_dd"]').first();
     await typeDropdown.waitFor({ state: 'visible', timeout: 15000 });
     await typeDropdown.selectOption(myPortalTypeCode);
-    await page.waitForTimeout(1000); // Allow ASP.NET postback / values to refresh
+    await page.waitForLoadState('networkidle').catch(() => {});
+    await page.waitForTimeout(500); // Allow ASP.NET postback / values to refresh
 
     const startDateInput = page.locator('#ctl00_MainPlaceHolder_newapp1_C_START_DATE_textBox').first();
     await startDateInput.click();
@@ -383,6 +384,7 @@ export async function POST(request: NextRequest) {
       el.dispatchEvent(new Event('change'));
       el.dispatchEvent(new Event('blur'));
     });
+    await page.waitForLoadState('networkidle').catch(() => {});
     await page.waitForTimeout(500);
 
     const endDateInput = page.locator('#ctl00_MainPlaceHolder_newapp1_C_END_DATE_textBox').first();
@@ -394,12 +396,14 @@ export async function POST(request: NextRequest) {
       el.dispatchEvent(new Event('change'));
       el.dispatchEvent(new Event('blur'));
     });
+    await page.waitForLoadState('networkidle').catch(() => {});
     await page.waitForTimeout(500);
 
     const modeDropdown = page.locator('#ctl00_MainPlaceHolder_newapp1_MODE, select[name*="MODE"]').first();
     if (await modeDropdown.count() > 0) {
       await modeDropdown.selectOption(modeValue);
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle').catch(() => {});
+      await page.waitForTimeout(500);
     }
 
     const reasonTextarea = page.locator('#ctl00_MainPlaceHolder_newapp1_REMARKS, textarea[name*="REMARKS"]').first();
@@ -410,6 +414,7 @@ export async function POST(request: NextRequest) {
     const approverDropdown = page.locator('#ctl00_MainPlaceHolder_newapp1_APPROVER_dd, select[name*="APPROVER_dd"]').first();
     if (await approverDropdown.count() > 0) {
       await approverDropdown.selectOption('200001808');
+      await page.waitForLoadState('networkidle').catch(() => {});
       await page.waitForTimeout(500);
     }
 
@@ -418,7 +423,8 @@ export async function POST(request: NextRequest) {
     if (await computeDaysBtn.count() > 0) {
       console.log('Found Compute Days button (...). Clicking to calculate days...');
       await computeDaysBtn.click();
-      await page.waitForTimeout(2500); // Wait for ASP.NET postback calculation
+      await page.waitForLoadState('networkidle').catch(() => {});
+      await page.waitForTimeout(1000); // Wait for ASP.NET postback calculation
     } else {
       console.log('No Compute Days button (...) found. Proceeding directly to submit.');
     }
@@ -426,14 +432,15 @@ export async function POST(request: NextRequest) {
     // Submit / Add
     const submitBtn = page.locator('#ctl00_MainPlaceHolder_newapp1_Add_btn, input[type="submit"][value="Add"], input[name*="Add_btn"]').first();
     await submitBtn.click();
+    await page.waitForLoadState('networkidle').catch(() => {});
 
     console.log('Submitted leave application. Checking for success redirection or validation messages...');
     
     let success = false;
     let finalError = '';
     
-    // Check for up to 10 seconds (20 iterations * 500ms)
-    for (let attempt = 0; attempt < 20; attempt++) {
+    // Check for up to 30 seconds (60 iterations * 500ms) to accommodate slow server response
+    for (let attempt = 0; attempt < 60; attempt++) {
       await page.waitForTimeout(500);
       const currentUrl = page.url();
       
