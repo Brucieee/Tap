@@ -492,6 +492,18 @@ export async function POST(request: NextRequest) {
 
     // Close browser
     await browser.close();
+
+    // Invalidate the portal logs cache so fresh data is loaded next time
+    try {
+      await supabase
+        .from('portal_logs_cache')
+        .delete()
+        .eq('user_id', user.id);
+      console.log(`[Cache Invalidation] Cleared portal logs cache for user ${user.id} due to leave filing`);
+    } catch (cacheErr) {
+      console.warn('Failed to clear portal_logs_cache:', cacheErr);
+    }
+
     return NextResponse.json({ success: true, message: 'Leave request filed successfully on MyPortal.' });
 
   } catch (error: any) {
@@ -584,6 +596,18 @@ export async function DELETE(request: NextRequest) {
     }
 
     await browser.close();
+
+    // Invalidate the portal logs cache so fresh data is loaded next time
+    try {
+      await supabase
+        .from('portal_logs_cache')
+        .delete()
+        .eq('user_id', user.id);
+      console.log(`[Cache Invalidation] Cleared portal logs cache for user ${user.id} due to leave deletion`);
+    } catch (cacheErr) {
+      console.warn('Failed to clear portal_logs_cache:', cacheErr);
+    }
+
     return NextResponse.json({ success: true, message: `Leave request ${docNo} deleted successfully from MyPortal.` });
 
   } catch (error: any) {

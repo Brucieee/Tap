@@ -482,6 +482,21 @@ export async function GET(request: NextRequest) {
         if (browser) await browser.close().catch(() => {});
       }
 
+      // If any leaves were successfully filed or deleted, invalidate the cache for this user
+      const hasUpdates = userSummary.filed.some((f: any) => f.status === 'success') || 
+                         userSummary.deleted.some((d: any) => d.status === 'success');
+      if (hasUpdates) {
+        try {
+          await supabase
+            .from('portal_logs_cache')
+            .delete()
+            .eq('user_id', profile.id);
+          console.log(`[Cache Invalidation] Cleared portal logs cache for user ${email} due to cron sync updates`);
+        } catch (cacheErr) {
+          console.warn('Failed to clear portal_logs_cache in cron:', cacheErr);
+        }
+      }
+
       syncResults.push(userSummary);
     }
   } catch (cronErr: any) {

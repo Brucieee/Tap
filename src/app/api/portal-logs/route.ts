@@ -685,6 +685,18 @@ export async function DELETE(request: NextRequest) {
     ]);
 
     console.log(`Successfully manually deleted docNo: ${docNo}`);
+
+    // Invalidate the portal logs cache so fresh data is loaded next time
+    try {
+      await supabase
+        .from('portal_logs_cache')
+        .delete()
+        .eq('user_id', user.id);
+      console.log(`[Cache Invalidation] Cleared portal logs cache for user ${user.id} due to manual log deletion`);
+    } catch (cacheErr) {
+      console.warn('Failed to clear portal_logs_cache:', cacheErr);
+    }
+
     return NextResponse.json({ success: true, message: `Successfully deleted log ${docNo}.` });
 
   } catch (err: any) {
