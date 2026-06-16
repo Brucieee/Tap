@@ -130,6 +130,8 @@ export default function DashboardPage() {
     id: '',
     employee_id: '',
     company_password: '',
+    myportal_employee_id: '',
+    myportal_password: '',
     wfh_days: [] as string[],
     login_time: '08:00',
     logout_time: '17:00',
@@ -163,6 +165,9 @@ export default function DashboardPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [hasPasswordStored, setHasPasswordStored] = useState(false);
   const [isLocked, setIsLocked] = useState(true);
+  const [showMyportalPassword, setShowMyportalPassword] = useState(false);
+  const [hasMyportalPasswordStored, setHasMyportalPasswordStored] = useState(false);
+  const [isMyportalLocked, setIsMyportalLocked] = useState(true);
   const [triggerBatEffect, setTriggerBatEffect] = useState(false);
   const [triggeringManualLog, setTriggeringManualLog] = useState<'login' | 'logout' | null>(null);
   const [manualDate, setManualDate] = useState('');
@@ -224,6 +229,8 @@ export default function DashboardPage() {
         body: JSON.stringify({
           employee_id: profile.employee_id,
           company_password: '__PRESERVED_PASSWORD__',
+          myportal_employee_id: profile.myportal_employee_id,
+          myportal_password: '__PRESERVED_PASSWORD__',
           wfh_days: profile.wfh_days,
           login_time: `${profile.login_time}:00`,
           logout_time: `${profile.logout_time}:00`,
@@ -253,6 +260,12 @@ export default function DashboardPage() {
   const [holidays, setHolidays] = useState<any[]>([]);
   const [loadingStandly, setLoadingStandly] = useState(true);
 
+  // MyPortal Integration State
+  const [myPortalLeaves, setMyPortalLeaves] = useState<any[]>([]);
+  const [loadingMyPortalLeaves, setLoadingMyPortalLeaves] = useState(false);
+  const [syncingLeaveId, setSyncingLeaveId] = useState<string | null>(null);
+  const [deletingLeaveDocNo, setDeletingLeaveDocNo] = useState<string | null>(null);
+
   // Portal Log History Integration State
   const [portalLogs, setPortalLogs] = useState<any[]>([]);
   const [loadingPortalLogs, setLoadingPortalLogs] = useState(false);
@@ -262,6 +275,8 @@ export default function DashboardPage() {
   const [recoveryStatus, setRecoveryStatus] = useState<{ date: string; modeLabel: string; state: 'running' | 'success' | 'failed' } | null>(null);
   const [deletingDocNo, setDeletingDocNo] = useState<string | null>(null);
   const attemptedRecoveriesRef = useRef<Set<string>>(new Set());
+  const autoSyncInitiatedRef = useRef<Record<string, boolean>>({});
+  const autoDeleteInitiatedRef = useRef<Record<string, boolean>>({});
   const [toasts, setToasts] = useState<Array<{ id: string; title: string; message: string; date: string; type: 'info' | 'success' | 'failed' }>>([]);
   const [isAdminWorkspaceExpanded, setIsAdminWorkspaceExpanded] = useState<boolean>(false);
 
@@ -272,6 +287,129 @@ export default function DashboardPage() {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 6000);
   };
+
+  const fetchMyPortalLeaves = async () => {
+    setLoadingMyPortalLeaves(true);
+    try {
+      const res = await fetch('/api/myportal-leaves');
+      if (res.ok) {
+        const data = await res.json();
+        setMyPortalLeaves(data.leaves || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch MyPortal leaves:', err);
+    } finally {
+      setLoadingMyPortalLeaves(false);
+    }
+  };
+
+  const handleSyncToMyPortal = async (leave: any) => {
+    setSyncingLeaveId(leave.id);
+    addToast('Syncing', `Filing leave on MyPortal for ${leave.start_date}...`, 'sync', 'info');
+    try {
+      const res = await fetch('/api/myportal-leaves', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leaveType: leave.type,
+          startDate: leave.start_date,
+          endDate: leave.end_date,
+          startTime: leave.start_time,
+          endTime: leave.end_time,
+          reason: leave.reason || 'Sync from Tap/Standly'
+        })
+      });
+      if (res.ok) {
+        addToast('Synced', `Successfully synced leave to MyPortal!`, 'sync', 'success');
+        fetchMyPortalLeaves();
+      } else {
+        const errorData = await res.json();
+        addToast('Error', errorData.error || 'Failed to sync to MyPortal.', 'sync', 'failed');
+      }
+    } catch (err: any) {
+      addToast('Error', err.message || 'Failed to sync to MyPortal.', 'sync', 'failed');
+    } finally {
+      setSyncingLeaveId(null);
+    }
+  };
+
+  const handleDeleteMyPortalLeave = async (docNo: string) => {
+    setDeletingLeaveDocNo(docNo);
+    addToast('Deleting', `Deleting leave request ${docNo} on MyPortal...`, 'sync', 'info');
+    try {
+      const res = await fetch(`/api/myportal-leaves?docNo=${docNo}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        addToast('Deleted', `Successfully deleted leave ${docNo} on MyPortal!`, 'sync', 'success');
+        fetchMyPortalLeaves();
+      } else {
+        const errorData = await res.json();
+        addToast('Error', errorData.error || 'Failed to delete on MyPortal.', 'sync', 'failed');
+      }
+    } catch (err: any) {
+      addToast('Error', err.message || 'Failed to delete on MyPortal.', 'sync', 'failed');
+    } finally {
+      setDeletingLeaveDocNo(null);
+    }
+  };
+
+  useEffect(() => {
+    // Only auto-sync if we have MyPortal credentials loaded
+    if (!profile?.myportal_employee_id || !profile?.myportal_password || profile.myportal_password === '' || profile.myportal_password === '__PRESERVED_PASSWORD__') {
+      return;
+    }
+    // Skip if we are currently fetching, loading, syncing, or deleting to avoid browser automation conflicts
+    if (loadingMyPortalLeaves || loadingStandly || syncingLeaveId !== null || deletingLeaveDocNo !== null) {
+      return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Filter active leaves (same logic as used in UI rendering)
+    const activeLeaves = leaves.filter((leave: any) => {
+      const endDate = new Date(leave.end_date);
+      endDate.setHours(23, 59, 59, 999);
+      return endDate >= today;
+    });
+
+    // 1. Find the first unsynced active leave to upload/submit
+    const unsyncedLeave = activeLeaves.find((leave: any) => {
+      const isMatched = myPortalLeaves.some((mpl: any) => {
+        return mpl.startDate === leave.start_date && mpl.endDate === leave.end_date && mpl.status.toLowerCase() !== 'deleted' && mpl.status.toLowerCase() !== 'rejected';
+      });
+      // Return true if it is not matched and we haven't initiated sync for it yet in this session
+      return !isMatched && !autoSyncInitiatedRef.current[leave.id];
+    });
+
+    if (unsyncedLeave) {
+      console.log('Auto-sync checker: Found unsynced leave. Syncing automatically...', unsyncedLeave);
+      autoSyncInitiatedRef.current[unsyncedLeave.id] = true;
+      handleSyncToMyPortal(unsyncedLeave);
+      return;
+    }
+
+    // 2. Find any MyPortal leaves that do NOT exist in Standly leaves anymore (deleted in Standly)
+    // We only target 'Pending' leaves since Approved leaves cannot be deleted.
+    const activeMyPortalLeaves = myPortalLeaves.filter((mpl: any) => {
+      return mpl.status.toLowerCase() === 'pending';
+    });
+
+    const deletedStandlyLeave = activeMyPortalLeaves.find((mpl: any) => {
+      const existsInStandly = leaves.some((leave: any) => {
+        return leave.start_date === mpl.startDate && leave.end_date === mpl.endDate;
+      });
+      return !existsInStandly && mpl.docNo && !autoDeleteInitiatedRef.current[mpl.docNo];
+    });
+
+    if (deletedStandlyLeave) {
+      console.log('Auto-sync checker: Found leave on MyPortal that does not exist in Standly (deleted). Deleting from MyPortal...', deletedStandlyLeave);
+      autoDeleteInitiatedRef.current[deletedStandlyLeave.docNo] = true;
+      addToast('Auto-Sync Deletion', `Canceling unmatched leave request (${deletedStandlyLeave.docNo}) from MyPortal.`, 'sync', 'info');
+      handleDeleteMyPortalLeave(deletedStandlyLeave.docNo);
+    }
+  }, [leaves, myPortalLeaves, loadingMyPortalLeaves, loadingStandly, syncingLeaveId, deletingLeaveDocNo, profile]);
 
   const router = useRouter();
   const supabase = createClient();
@@ -671,25 +809,34 @@ export default function DashboardPage() {
           const cleanLoginTime = data.login_time ? data.login_time.substring(0, 5) : '08:00';
           const cleanLogoutTime = data.logout_time ? data.logout_time.substring(0, 5) : '17:00';
 
-          const passwordPresent = !!data.company_password;
-          setHasPasswordStored(passwordPresent);
-          setIsLocked(passwordPresent);
-
-          setProfile({
-            id: data.id || '',
-            employee_id: data.employee_id || '',
-            company_password: passwordPresent ? '__PRESERVED_PASSWORD__' : '',
-            wfh_days: data.wfh_days || [],
-            login_time: cleanLoginTime,
-            logout_time: cleanLogoutTime,
-            is_automation_enabled: data.is_automation_enabled !== undefined ? data.is_automation_enabled : true,
-            wfh_reason: data.wfh_reason || 'Work from home',
-            role: data.role || 'user',
-            wfh_offsets: data.wfh_offsets || {}
-          });
+           const passwordPresent = !!data.company_password;
+           setHasPasswordStored(passwordPresent);
+           setIsLocked(passwordPresent);
+ 
+           const myportalPasswordPresent = !!data.myportal_password;
+           setHasMyportalPasswordStored(myportalPasswordPresent);
+           setIsMyportalLocked(myportalPasswordPresent);
+ 
+           setProfile({
+             id: data.id || '',
+             employee_id: data.employee_id || '',
+             company_password: passwordPresent ? '__PRESERVED_PASSWORD__' : '',
+             myportal_employee_id: data.myportal_employee_id || '',
+             myportal_password: myportalPasswordPresent ? '__PRESERVED_PASSWORD__' : '',
+             wfh_days: data.wfh_days || [],
+             login_time: cleanLoginTime,
+             logout_time: cleanLogoutTime,
+             is_automation_enabled: data.is_automation_enabled !== undefined ? data.is_automation_enabled : true,
+             wfh_reason: data.wfh_reason || 'Work from home',
+             role: data.role || 'user',
+             wfh_offsets: data.wfh_offsets || {}
+           });
 
           if (passwordPresent) {
             handleSyncPortalLogs(data.wfh_days || [], data.is_automation_enabled !== undefined ? data.is_automation_enabled : true);
+          }
+          if (myportalPasswordPresent) {
+            fetchMyPortalLeaves();
           }
         }
       } catch (error) {
@@ -790,6 +937,8 @@ export default function DashboardPage() {
         body: JSON.stringify({
           employee_id: profile.employee_id,
           company_password: profile.company_password,
+          myportal_employee_id: profile.myportal_employee_id,
+          myportal_password: profile.myportal_password,
           wfh_days: profile.wfh_days,
           login_time: `${profile.login_time}:00`,
           logout_time: `${profile.logout_time}:00`,
@@ -801,9 +950,14 @@ export default function DashboardPage() {
       if (response.ok) {
         setMessage({ text: 'Configuration saved successfully!', type: 'success' });
         setIsLocked(true);
+        setIsMyportalLocked(true);
         if (profile.company_password && profile.company_password !== '__PRESERVED_PASSWORD__') {
           setHasPasswordStored(true);
           setProfile(prev => ({ ...prev, company_password: '__PRESERVED_PASSWORD__' }));
+        }
+        if (profile.myportal_password && profile.myportal_password !== '__PRESERVED_PASSWORD__') {
+          setHasMyportalPasswordStored(true);
+          setProfile(prev => ({ ...prev, myportal_password: '__PRESERVED_PASSWORD__' }));
         }
       } else {
         const errorData = await response.json();
@@ -1795,33 +1949,37 @@ export default function DashboardPage() {
                             case 'vacation':
                               badgeBg = '#ecfdf5';
                               badgeColor = '#059669';
-                              typeLabel = '🏖️ Vacation';
+                              typeLabel = 'Vacation Leave';
                               break;
                             case 'sick':
                               badgeBg = '#fef2f2';
                               badgeColor = '#dc2626';
-                              typeLabel = '🤒 Sick';
+                              typeLabel = 'Sick Leave';
                               break;
                             case 'personal':
                               badgeBg = '#fef3c7';
                               badgeColor = '#d97706';
-                              typeLabel = '🏠 Personal';
+                              typeLabel = 'Personal Leave';
                               break;
                             case 'wellness':
                               badgeBg = '#f0fdf4';
                               badgeColor = '#16a34a';
-                              typeLabel = '🧘 Wellness';
+                              typeLabel = 'Wellness Leave';
                               break;
                             case 'birthday':
                               badgeBg = '#fdf2f8';
                               badgeColor = '#db2777';
-                              typeLabel = '🎂 Birthday';
+                              typeLabel = 'Birthday Leave';
                               break;
                           }
 
                           const start = new Date(leave.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                           const end = new Date(leave.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                           const dateText = start === end ? start : `${start} - ${end}`;
+
+                          const matchedMyPortalLeave = myPortalLeaves.find((mpl: any) => {
+                            return mpl.startDate === leave.start_date && mpl.endDate === leave.end_date && mpl.status.toLowerCase() !== 'deleted' && mpl.status.toLowerCase() !== 'rejected';
+                          });
 
                           return (
                             <div key={leave.id || idx} style={{
@@ -1855,6 +2013,72 @@ export default function DashboardPage() {
                                   "{leave.reason}"
                                 </p>
                               )}
+                              <div style={{ 
+                                marginTop: '8px', 
+                                borderTop: '1px solid #f1f5f9', 
+                                paddingTop: '8px',
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'space-between',
+                                gap: '8px'
+                              }}>
+                                {matchedMyPortalLeave ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <span style={{
+                                      display: 'inline-block',
+                                      width: '6px',
+                                      height: '6px',
+                                      borderRadius: '50%',
+                                      backgroundColor: matchedMyPortalLeave.status === 'Approved' ? '#10b981' : '#f59e0b'
+                                    }} />
+                                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                                      MyPortal: {matchedMyPortalLeave.status}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>
+                                      MyPortal: Not Synced
+                                    </span>
+                                    {profile.myportal_employee_id ? (
+                                      <button
+                                        disabled={syncingLeaveId === leave.id}
+                                        onClick={() => handleSyncToMyPortal(leave)}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          padding: '2px 8px',
+                                          fontSize: '0.65rem',
+                                          fontWeight: 600,
+                                          color: 'var(--accent-blue)',
+                                          background: 'rgba(41, 116, 166, 0.08)',
+                                          border: '1px solid rgba(41, 116, 166, 0.15)',
+                                          borderRadius: '6px',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.2s'
+                                        }}
+                                      >
+                                        {syncingLeaveId === leave.id ? (
+                                          <>
+                                            <Loader2 className="animate-spin" style={{ width: '10px', height: '10px', animation: 'spin 1.5s linear infinite' }} />
+                                            <span>Syncing...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <RefreshCw style={{ width: '10px', height: '10px' }} />
+                                            <span>Sync</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <span style={{ fontSize: '0.6rem', color: '#cbd5e1', fontStyle: 'italic' }}>
+                                        No credentials
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
@@ -2401,6 +2625,9 @@ export default function DashboardPage() {
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
                         {cells.map((cell, index) => {
                           const dayLogs = cell.dateStr ? logsByDate[cell.dateStr] || [] : [];
+                          const dayLeaves = cell.dateStr ? myPortalLeaves.filter((mpl: any) => {
+                            return cell.dateStr >= mpl.startDate && cell.dateStr <= mpl.endDate && mpl.status.toLowerCase() !== 'deleted' && mpl.status.toLowerCase() !== 'rejected';
+                          }) : [];
                           const todayStr = new Date().toLocaleDateString('en-CA'); // 'YYYY-MM-DD' format reliably
                           const isToday = cell.dateStr === todayStr;
                           const isWeekend = (index % 7 === 0 || index % 7 === 6);
@@ -2427,53 +2654,96 @@ export default function DashboardPage() {
                               transition: 'transform 0.15s ease, box-shadow 0.15s ease'
                             }}>
                               <span style={{
-                                fontSize: '0.7rem',
-                                fontWeight: cell.isCurrentMonth ? 800 : 400,
-                                color: isToday ? 'var(--accent-blue)' : 'var(--brand-navy)',
-                                alignSelf: 'flex-start'
-                              }}>
-                                {cell.day}
-                              </span>
-                              
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexGrow: 1, justifyContent: 'flex-start' }}>
-                                {(() => {
-                                  const sortedDayLogs = [...dayLogs].sort((a, b) => {
-                                    const aIsIn = a.mode.toLowerCase().includes('in');
-                                    const bIsIn = b.mode.toLowerCase().includes('in');
-                                    if (aIsIn && !bIsIn) return -1;
-                                    if (!aIsIn && bIsIn) return 1;
-                                    return 0;
-                                  });
+                                  fontSize: '0.7rem',
+                                  fontWeight: cell.isCurrentMonth ? 800 : 400,
+                                  color: isToday ? 'var(--accent-blue)' : 'var(--brand-navy)',
+                                  alignSelf: 'flex-start'
+                                }}>
+                                  {cell.day}
+                                </span>
+                                
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexGrow: 1, justifyContent: 'flex-start' }}>
+                                  {(() => {
+                                    const sortedDayLogs = [...dayLogs].sort((a, b) => {
+                                      const aIsIn = a.mode.toLowerCase().includes('in');
+                                      const bIsIn = b.mode.toLowerCase().includes('in');
+                                      if (aIsIn && !bIsIn) return -1;
+                                      if (!aIsIn && bIsIn) return 1;
+                                      return 0;
+                                    });
 
-                                  return sortedDayLogs.map((log: any, idx: number) => {
-                                    const isTimeIn = log.mode.toLowerCase().includes('in');
-                                    
                                     return (
-                                      <div key={idx} style={{
-                                        fontSize: '0.55rem',
-                                        fontWeight: 800,
-                                        padding: '1.5px 5px',
-                                        borderRadius: '999px',
-                                        backgroundColor: isTimeIn ? '#e2fbe8' : '#fde2e2',
-                                        color: isTimeIn ? '#15803d' : '#b91c1c',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        gap: '2px',
-                                        border: '1px solid',
-                                        borderColor: isTimeIn ? 'rgba(21, 128, 61, 0.2)' : 'rgba(185, 28, 28, 0.2)',
-                                        whiteSpace: 'nowrap'
-                                      }}>
-                                        <span>{isTimeIn ? 'In' : 'Out'}:</span>
-                                        <span>{formatCleanTime(log.time)}</span>
-                                      </div>
+                                      <>
+                                        {sortedDayLogs.map((log: any, idx: number) => {
+                                          const isTimeIn = log.mode.toLowerCase().includes('in');
+                                          
+                                          return (
+                                            <div key={idx} style={{
+                                              fontSize: '0.55rem',
+                                              fontWeight: 800,
+                                              padding: '1.5px 5px',
+                                              borderRadius: '999px',
+                                              backgroundColor: isTimeIn ? '#e2fbe8' : '#fde2e2',
+                                              color: isTimeIn ? '#15803d' : '#b91c1c',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'space-between',
+                                              gap: '2px',
+                                              border: '1px solid',
+                                              borderColor: isTimeIn ? 'rgba(21, 128, 61, 0.2)' : 'rgba(185, 28, 28, 0.2)',
+                                              whiteSpace: 'nowrap'
+                                            }}>
+                                              <span>{isTimeIn ? 'In' : 'Out'}:</span>
+                                              <span>{formatCleanTime(log.time)}</span>
+                                            </div>
+                                          );
+                                        })}
+                                        {dayLeaves.map((leave: any, idx: number) => {
+                                          let displayType = leave.type;
+                                          if (displayType.toLowerCase() === 'vacation') displayType = 'Vacation Leave';
+                                          else if (displayType.toLowerCase() === 'sick') displayType = 'Sick Leave';
+                                          else if (displayType.toLowerCase() === 'birthday') displayType = 'Birthday Leave';
+                                          else if (displayType.toLowerCase() === 'wellness') displayType = 'Wellness Leave';
+                                          else if (displayType.toLowerCase() === 'bereavement') displayType = 'Bereavement Leave';
+                                          else if (displayType.toLowerCase() === 'paternity') displayType = 'Paternity Leave';
+                                          else {
+                                            displayType = displayType.charAt(0).toUpperCase() + displayType.slice(1) + ' Leave';
+                                          }
+
+                                          const isApproved = leave.status.toLowerCase() === 'approved';
+
+                                          return (
+                                            <div key={`leave-${idx}`} style={{
+                                              fontSize: '0.55rem',
+                                              fontWeight: 800,
+                                              padding: '1.5px 5px',
+                                              borderRadius: '999px',
+                                              backgroundColor: '#e0f2fe',
+                                              color: '#0369a1',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'space-between',
+                                              gap: '4px',
+                                              border: '1px solid',
+                                              borderColor: 'rgba(3, 105, 161, 0.2)',
+                                              whiteSpace: 'nowrap'
+                                            }} title={`${displayType} - ${leave.status}`}>
+                                              <span>{displayType}:</span>
+                                              {isApproved ? (
+                                                <Check style={{ width: '8px', height: '8px', strokeWidth: 3 }} />
+                                              ) : (
+                                                <span title="Pending">⏳</span>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </>
                                     );
-                                  });
-                                })()}
+                                  })()}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
                       </div>
                     </div>
                   ) : (
@@ -2491,91 +2761,131 @@ export default function DashboardPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {portalLogs.map((log, index) => {
-                            const isTimeIn = log.mode.toLowerCase().includes('in');
-                            const isApproved = log.status.toLowerCase() === 'approved' || log.status.toLowerCase() === 'active';
-                            
-                            return (
-                              <tr key={index} style={{ borderBottom: index === portalLogs.length - 1 ? 'none' : '1px solid #f1f5f9', backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                                <td style={{ width: '20%', padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                  {log.date.includes(' ') ? log.date.split(/\s+/)[0] : log.date}
-                                </td>
-                                <td style={{ width: '20%', padding: '0.75rem 1rem', color: '#475569', fontWeight: 500 }}>
-                                  {formatCleanTime(log.time)}
-                                </td>
-                                <td style={{ width: '15%', padding: '0.75rem 1rem' }}>
-                                  <span style={{
-                                    fontSize: '0.7rem',
-                                    fontWeight: 700,
-                                    padding: '2px 8px',
-                                    borderRadius: '999px',
-                                    backgroundColor: isTimeIn ? '#f0fdf4' : '#fef2f2',
-                                    color: isTimeIn ? '#16a34a' : '#dc2626',
-                                    textTransform: 'uppercase'
-                                  }}>
-                                    {log.mode}
-                                  </span>
-                                </td>
-                                <td style={{ width: '15%', padding: '0.75rem 1rem' }}>
-                                  <span style={{
-                                    fontSize: '0.7rem',
-                                    fontWeight: 700,
-                                    padding: '2px 8px',
-                                    borderRadius: '999px',
-                                    backgroundColor: isApproved ? 'rgba(22, 163, 74, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-                                    border: isApproved ? '1px solid rgba(22, 163, 74, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
-                                    color: isApproved ? '#16a34a' : '#ef4444'
-                                  }}>
-                                    {log.status}
-                                  </span>
-                                </td>
-                                <td style={{ width: '15%', padding: '0.75rem 1rem', fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                                  {log.docNo || '—'}
-                                </td>
-                                <td style={{ width: '15%', padding: '0.75rem 1rem' }}>
-                                  {log.docNo ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeletePortalLog(log.docNo, log.status)}
-                                      disabled={deletingDocNo !== null || isApproved}
-                                      style={{
-                                        background: isApproved 
-                                          ? 'rgba(148, 163, 184, 0.05)'
-                                          : deletingDocNo === log.docNo 
-                                            ? 'rgba(239, 68, 68, 0.1)' 
-                                            : 'rgba(239, 68, 68, 0.05)',
-                                        border: isApproved
-                                          ? '1px solid rgba(148, 163, 184, 0.1)'
-                                          : '1px solid rgba(239, 68, 68, 0.2)',
-                                        color: isApproved ? '#94a3b8' : '#ef4444',
-                                        borderRadius: '6px',
-                                        fontSize: '0.7rem',
-                                        fontWeight: 700,
-                                        padding: '4px 8px',
-                                        cursor: (deletingDocNo !== null || isApproved) ? 'not-allowed' : 'pointer',
-                                        transition: 'all 0.2s',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px'
-                                      }}
-                                      title={isApproved ? "Approved logs cannot be deleted" : "Delete Log"}
-                                    >
-                                      {deletingDocNo === log.docNo ? (
-                                        <>
-                                          <Loader2 size={10} className="animate-spin" />
-                                          Deleting
-                                        </>
-                                      ) : (
-                                        'Delete'
-                                      )}
-                                    </button>
-                                  ) : (
-                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
+                          {(() => {
+                            const combinedLogs = [
+                              ...portalLogs.map(log => ({
+                                ...log,
+                                isLeave: false,
+                                displayDate: log.date.includes(' ') ? log.date.split(/\s+/)[0] : log.date,
+                                sortDate: log.date.includes(' ') ? log.date.split(/\s+/)[0] : log.date
+                              })),
+                              ...myPortalLeaves
+                                .filter((leave: any) => leave.status.toLowerCase() !== 'deleted' && leave.status.toLowerCase() !== 'rejected')
+                                .map(leave => ({
+                                  date: leave.startDate === leave.endDate ? leave.startDate : `${leave.startDate} to ${leave.endDate}`,
+                                  time: '—',
+                                  mode: `Leave (${leave.type})`,
+                                  status: leave.status,
+                                  docNo: leave.docNo,
+                                  isLeave: true,
+                                  displayDate: leave.startDate === leave.endDate ? leave.startDate : `${leave.startDate} to ${leave.endDate}`,
+                                  sortDate: leave.startDate
+                                }))
+                            ].sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime());
+
+                            return combinedLogs.map((log, index) => {
+                              const isTimeIn = !log.isLeave && log.mode.toLowerCase().includes('in');
+                              const isApproved = log.status.toLowerCase() === 'approved' || log.status.toLowerCase() === 'active';
+                              
+                              let badgeBg = isTimeIn ? '#f0fdf4' : '#fef2f2';
+                              let badgeColor = isTimeIn ? '#16a34a' : '#dc2626';
+                              if (log.isLeave) {
+                                badgeBg = '#e0f2fe';
+                                badgeColor = '#0369a1';
+                              }
+                              
+                              let statusBg = isApproved ? 'rgba(22, 163, 74, 0.08)' : 'rgba(239, 68, 68, 0.08)';
+                              let statusBorder = isApproved ? '1px solid rgba(22, 163, 74, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)';
+                              let statusColor = isApproved ? '#16a34a' : '#ef4444';
+                              
+                              if (log.isLeave && !isApproved) {
+                                statusBg = 'rgba(245, 158, 11, 0.08)';
+                                statusBorder = '1px solid rgba(245, 158, 11, 0.2)';
+                                statusColor = '#f59e0b';
+                              }
+
+                              return (
+                                <tr key={index} style={{ borderBottom: index === combinedLogs.length - 1 ? 'none' : '1px solid #f1f5f9', backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa' }}>
+                                  <td style={{ width: '20%', padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                    {log.displayDate}
+                                  </td>
+                                  <td style={{ width: '20%', padding: '0.75rem 1rem', color: '#475569', fontWeight: 500 }}>
+                                    {log.isLeave ? '—' : formatCleanTime(log.time)}
+                                  </td>
+                                  <td style={{ width: '15%', padding: '0.75rem 1rem' }}>
+                                    <span style={{
+                                      fontSize: '0.7rem',
+                                      fontWeight: 700,
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      backgroundColor: badgeBg,
+                                      color: badgeColor,
+                                      textTransform: 'uppercase'
+                                    }}>
+                                      {log.mode}
+                                    </span>
+                                  </td>
+                                  <td style={{ width: '15%', padding: '0.75rem 1rem' }}>
+                                    <span style={{
+                                      fontSize: '0.7rem',
+                                      fontWeight: 700,
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      backgroundColor: statusBg,
+                                      border: statusBorder,
+                                      color: statusColor
+                                    }}>
+                                      {log.status}
+                                    </span>
+                                  </td>
+                                  <td style={{ width: '15%', padding: '0.75rem 1rem', fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                    {log.docNo || '—'}
+                                  </td>
+                                  <td style={{ width: '15%', padding: '0.75rem 1rem' }}>
+                                    {log.docNo && !log.isLeave ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeletePortalLog(log.docNo, log.status)}
+                                        disabled={deletingDocNo !== null || isApproved}
+                                        style={{
+                                          background: isApproved 
+                                            ? 'rgba(148, 163, 184, 0.05)'
+                                            : deletingDocNo === log.docNo 
+                                              ? 'rgba(239, 68, 68, 0.1)' 
+                                              : 'rgba(239, 68, 68, 0.05)',
+                                          border: isApproved
+                                            ? '1px solid rgba(148, 163, 184, 0.1)'
+                                            : '1px solid rgba(239, 68, 68, 0.2)',
+                                          color: isApproved ? '#94a3b8' : '#ef4444',
+                                          borderRadius: '6px',
+                                          fontSize: '0.7rem',
+                                          fontWeight: 700,
+                                          padding: '4px 8px',
+                                          cursor: (deletingDocNo !== null || isApproved) ? 'not-allowed' : 'pointer',
+                                          transition: 'all 0.2s',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px'
+                                        }}
+                                        title={isApproved ? "Approved records cannot be deleted" : "Delete Record"}
+                                      >
+                                        {deletingDocNo === log.docNo ? (
+                                          <>
+                                            <Loader2 size={10} className="animate-spin" style={{ animation: 'spin 1.5s linear infinite' }} />
+                                            Deleting
+                                          </>
+                                        ) : (
+                                          'Delete'
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            });
+                          })()}
                         </tbody>
                       </table>
                     </div>
@@ -2597,7 +2907,7 @@ export default function DashboardPage() {
               gap: '2.25rem'
             }}>
             
-            {/* 2. Portal Credentials Card */}
+            {/* 2. Timelog Credentials Card */}
             <div className="ui-card" style={{ maxWidth: '100%', padding: '2.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div 
                 onClick={() => hasPasswordStored && setIsLocked(!isLocked)}
@@ -2614,7 +2924,7 @@ export default function DashboardPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Settings style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>
-                    Portal Credentials
+                    Timelog Credentials
                   </h3>
                 </div>
                 {hasPasswordStored && (
@@ -2640,7 +2950,7 @@ export default function DashboardPage() {
               </div>
 
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                Credentials entered here are encrypted and safe.
+                Credentials for timelog.cocogen.com.ph (encrypted and safe).
               </p>
 
               {/* Employee ID */}
@@ -2714,6 +3024,128 @@ export default function DashboardPage() {
                       }}
                     >
                       {showPassword ? <EyeOff style={{ width: '16px', height: '16px' }} /> : <Eye style={{ width: '16px', height: '16px' }} />}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 2.5. MyPortal Credentials Card */}
+            <div className="ui-card" style={{ maxWidth: '100%', padding: '2.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div 
+                onClick={() => hasMyportalPasswordStored && setIsMyportalLocked(!isMyportalLocked)}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  borderBottom: '1px solid #e2e8f0', 
+                  paddingBottom: '0.75rem',
+                  cursor: hasMyportalPasswordStored ? 'pointer' : 'default',
+                  userSelect: 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Settings style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)' }}>
+                    MyPortal Credentials
+                  </h3>
+                </div>
+                {hasMyportalPasswordStored && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsMyportalLocked(!isMyportalLocked);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent-blue)',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    {isMyportalLocked ? 'Edit' : 'Lock'}
+                  </button>
+                )}
+              </div>
+
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                Credentials for myportal.cocogen.com.ph (encrypted and safe).
+              </p>
+
+              {/* Employee ID */}
+              <div>
+                <label className="glass-label" htmlFor="myportal-employee-id-input">Employee ID</label>
+                <div className="ui-input-wrapper" style={{ 
+                  marginBottom: 0,
+                  marginTop: '0.5rem',
+                  opacity: isMyportalLocked ? 0.75 : 1,
+                  backgroundColor: isMyportalLocked ? '#f8fafc' : 'transparent'
+                }}>
+                  <User className="ui-input-icon" />
+                  <input
+                    id="myportal-employee-id-input"
+                    type="text"
+                    autoComplete="off"
+                    placeholder="200002000"
+                    value={profile.myportal_employee_id || ''}
+                    onChange={(e) => setProfile({ ...profile, myportal_employee_id: e.target.value })}
+                    className="ui-input"
+                    readOnly={isMyportalLocked}
+                    style={{
+                      borderRadius: '14px',
+                      paddingLeft: '2.75rem',
+                      cursor: isMyportalLocked ? 'not-allowed' : 'text'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="glass-label" htmlFor="myportal-password-input">Password</label>
+                <div className="ui-input-wrapper" style={{ 
+                  marginBottom: 0,
+                  marginTop: '0.5rem',
+                  opacity: isMyportalLocked ? 0.75 : 1,
+                  backgroundColor: isMyportalLocked ? '#f8fafc' : 'transparent'
+                }}>
+                  <Lock className="ui-input-icon" />
+                  <input
+                    id="myportal-password-input"
+                    type={showMyportalPassword && !isMyportalLocked ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    placeholder={hasMyportalPasswordStored ? '••••••••' : 'Enter your password'}
+                    value={profile.myportal_password === '__PRESERVED_PASSWORD__' ? '' : profile.myportal_password || ''}
+                    onChange={(e) => setProfile({ ...profile, myportal_password: e.target.value || '__PRESERVED_PASSWORD__' })}
+                    className="ui-input"
+                    readOnly={isMyportalLocked}
+                    style={{ 
+                      borderRadius: '14px',
+                      paddingLeft: '2.75rem',
+                      paddingRight: '2.5rem',
+                      cursor: isMyportalLocked ? 'not-allowed' : 'text'
+                    }}
+                  />
+                  {!isMyportalLocked && (
+                    <button
+                      type="button"
+                      onClick={() => setShowMyportalPassword(!showMyportalPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {showMyportalPassword ? <EyeOff style={{ width: '16px', height: '16px' }} /> : <Eye style={{ width: '16px', height: '16px' }} />}
                     </button>
                   )}
                 </div>

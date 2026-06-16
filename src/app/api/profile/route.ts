@@ -29,6 +29,8 @@ export async function GET() {
           id: user.id,
           employee_id: '',
           company_password: '',
+          myportal_employee_id: '',
+          myportal_password: '',
           wfh_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
           login_time: '08:00:00',
           logout_time: '17:00:00',
@@ -44,11 +46,15 @@ export async function GET() {
     // Decrypt credentials safely on the server before sending to client
     const decryptedEmployeeId = profile.employee_id ? decrypt(profile.employee_id) : '';
     const decryptedPassword = profile.company_password ? decrypt(profile.company_password) : '';
+    const decryptedMyportalEmployeeId = profile.myportal_employee_id ? decrypt(profile.myportal_employee_id) : '';
+    const decryptedMyportalPassword = profile.myportal_password ? decrypt(profile.myportal_password) : '';
 
     return NextResponse.json({
       ...profile,
       employee_id: decryptedEmployeeId,
-      company_password: decryptedPassword
+      company_password: decryptedPassword,
+      myportal_employee_id: decryptedMyportalEmployeeId,
+      myportal_password: decryptedMyportalPassword
     });
 
   } catch (error: any) {
@@ -72,6 +78,8 @@ export async function POST(request: NextRequest) {
     const {
       employee_id,
       company_password,
+      myportal_employee_id,
+      myportal_password,
       wfh_days,
       login_time,
       logout_time,
@@ -83,18 +91,26 @@ export async function POST(request: NextRequest) {
     // Encrypt the credentials
     const encryptedEmployeeId = employee_id ? encrypt(employee_id) : null;
     const encryptedPassword = company_password ? encrypt(company_password) : null;
+    const encryptedMyportalEmployeeId = myportal_employee_id ? encrypt(myportal_employee_id) : null;
+    const encryptedMyportalPassword = myportal_password ? encrypt(myportal_password) : null;
 
     // Fetch existing profile to preserve password if the user didn't modify it
     let finalPassword = encryptedPassword;
+    let finalMyportalPassword = encryptedMyportalPassword;
     
-    if (company_password === '__PRESERVED_PASSWORD__') {
+    if (company_password === '__PRESERVED_PASSWORD__' || myportal_password === '__PRESERVED_PASSWORD__') {
       const { data: existingProfile } = await supabase
         .from('user_profiles')
-        .select('company_password')
+        .select('company_password, myportal_password')
         .eq('id', user.id)
         .single();
       
-      finalPassword = existingProfile?.company_password || null;
+      if (company_password === '__PRESERVED_PASSWORD__') {
+        finalPassword = existingProfile?.company_password || null;
+      }
+      if (myportal_password === '__PRESERVED_PASSWORD__') {
+        finalMyportalPassword = existingProfile?.myportal_password || null;
+      }
     }
 
     // Upsert into Supabase user_profiles table
@@ -104,6 +120,8 @@ export async function POST(request: NextRequest) {
         id: user.id,
         employee_id: encryptedEmployeeId,
         company_password: finalPassword,
+        myportal_employee_id: encryptedMyportalEmployeeId,
+        myportal_password: finalMyportalPassword,
         wfh_days: wfh_days || [],
         login_time: login_time || '08:00:00',
         logout_time: logout_time || '17:00:00',

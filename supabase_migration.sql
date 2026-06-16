@@ -3,17 +3,25 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
     id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
     employee_id TEXT, -- Encrypted AES-256 string
     company_password TEXT, -- Encrypted AES-256 string
+    myportal_employee_id TEXT, -- Encrypted AES-256 string for MyPortal
+    myportal_password TEXT, -- Encrypted AES-256 string for MyPortal
     wfh_days TEXT[] DEFAULT '{}', -- Array of days, e.g., ['Monday', 'Wednesday', 'Friday']
     login_time TIME WITHOUT TIME ZONE DEFAULT '08:00:00',
     logout_time TIME WITHOUT TIME ZONE DEFAULT '17:00:00',
     is_automation_enabled BOOLEAN DEFAULT TRUE,
     wfh_reason TEXT DEFAULT 'Work from home',
+    wfh_offsets JSONB DEFAULT '{}'::jsonb,
+    role TEXT DEFAULT 'user',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- Schema Migration: Run this if your user_profiles table already exists to add the column:
+-- Schema Migration: Run this if your user_profiles table already exists to add the columns:
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS wfh_reason TEXT DEFAULT 'Work from home';
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS wfh_offsets JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'user';
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS myportal_employee_id TEXT;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS myportal_password TEXT;
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
