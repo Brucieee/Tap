@@ -274,16 +274,15 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        // Determine actions needed
-        const thresholdDate = new Date();
-        thresholdDate.setDate(thresholdDate.getDate() - 30);
-        thresholdDate.setHours(0, 0, 0, 0);
+        // Determine actions needed (Only sync leaves starting from today onwards)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-        // 1. File leaves that exist in Standly but are missing in MyPortal
+        // 1. File leaves that exist in Standly but are missing in MyPortal (starting today onwards)
         const activeStandlyLeaves = userStandlyLeaves.filter((leave: any) => {
-          const endDate = new Date(leave.end_date);
-          endDate.setHours(23, 59, 59, 999);
-          return endDate >= thresholdDate;
+          const startDate = new Date(leave.start_date);
+          startDate.setHours(0, 0, 0, 0);
+          return startDate >= today;
         });
 
         const unsyncedLeaves = activeStandlyLeaves.filter((leave: any) => {
@@ -433,7 +432,11 @@ export async function GET(request: NextRequest) {
         }
 
         // 2. Delete leaves that are on MyPortal but were cancelled/deleted in Standly
-        const activeMyPortalLeaves = myPortalLeaves.filter(mpl => mpl.status.toLowerCase() === 'pending');
+        const activeMyPortalLeaves = myPortalLeaves.filter(mpl => {
+          const startDate = new Date(mpl.startDate);
+          startDate.setHours(0, 0, 0, 0);
+          return mpl.status.toLowerCase() === 'pending' && startDate >= today;
+        });
         const deletedStandlyLeaves = activeMyPortalLeaves.filter((mpl: any) => {
           const existsInStandly = userStandlyLeaves.some((leave: any) => {
             return leave.start_date === mpl.startDate && leave.end_date === mpl.endDate;

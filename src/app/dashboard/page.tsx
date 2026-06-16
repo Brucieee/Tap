@@ -364,15 +364,14 @@ export default function DashboardPage() {
       return;
     }
 
-    const thresholdDate = new Date();
-    thresholdDate.setDate(thresholdDate.getDate() - 30); // Allow up to 30 days in the past for retroactive/late filings
-    thresholdDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    // Filter active leaves (same logic as used in UI rendering, plus recent past leaves)
+    // Filter active leaves (only sync leaves starting today or in the future)
     const activeLeaves = leaves.filter((leave: any) => {
-      const endDate = new Date(leave.end_date);
-      endDate.setHours(23, 59, 59, 999);
-      return endDate >= thresholdDate;
+      const startDate = new Date(leave.start_date);
+      startDate.setHours(0, 0, 0, 0);
+      return startDate >= today;
     });
 
     // 1. Find the first unsynced active leave to upload/submit
@@ -393,8 +392,11 @@ export default function DashboardPage() {
 
     // 2. Find any MyPortal leaves that do NOT exist in Standly leaves anymore (deleted in Standly)
     // We only target 'Pending' leaves since Approved leaves cannot be deleted.
+    // We only target 'Pending' leaves starting today or in the future
     const activeMyPortalLeaves = myPortalLeaves.filter((mpl: any) => {
-      return mpl.status.toLowerCase() === 'pending';
+      const startDate = new Date(mpl.startDate);
+      startDate.setHours(0, 0, 0, 0);
+      return mpl.status.toLowerCase() === 'pending' && startDate >= today;
     });
 
     const deletedStandlyLeave = activeMyPortalLeaves.find((mpl: any) => {
