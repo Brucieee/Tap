@@ -636,12 +636,12 @@ export default function DashboardPage() {
     }
   };
 
-  const handleSyncPortalLogs = async (currentWfhDays?: string[], isAutomationEnabled?: boolean, attempt = 1) => {
+  const handleSyncPortalLogs = async (currentWfhDays?: string[], isAutomationEnabled?: boolean, attempt = 1, force = false) => {
     setLoadingPortalLogs(true);
     setSyncError(attempt > 1 ? `Retrying portal sync (Attempt ${attempt}/3)...` : '');
     
     try {
-      const response = await fetch('/api/portal-logs');
+      const response = await fetch('/api/portal-logs' + (force ? '?force=true' : ''));
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.logs) {
@@ -750,7 +750,7 @@ export default function DashboardPage() {
         
         // Wait 4 seconds before next attempt
         await new Promise(resolve => setTimeout(resolve, 4000));
-        await handleSyncPortalLogs(currentWfhDays, isAutomationEnabled, attempt + 1);
+        await handleSyncPortalLogs(currentWfhDays, isAutomationEnabled, attempt + 1, force);
       } else {
         setSyncError(err.message || 'Failed to sync portal logs after 3 attempts.');
         addToast('Sync Failed', `Connection failed after 3 attempts: ${err.message || 'Portal unreachable'}`, 'sync', 'failed');
@@ -2340,7 +2340,7 @@ export default function DashboardPage() {
               </div>
               <button 
                 type="button"
-                onClick={() => handleSyncPortalLogs()}
+                onClick={() => handleSyncPortalLogs(undefined, undefined, 1, true)}
                 disabled={loadingPortalLogs || !hasPasswordStored}
                 className="btn-ui-secondary"
                 style={{

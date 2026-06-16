@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const bypassAuth = searchParams.get('bypassAuth') === 'true';
+    const forceSync = searchParams.get('force') === 'true';
 
     // 1. Authenticate User Session
     const supabase = await createClient();
@@ -69,6 +70,32 @@ export async function GET(request: NextRequest) {
 
     if (!decryptedEmployeeId || !decryptedPassword) {
       return NextResponse.json({ error: 'Failed to decrypt credentials.' }, { status: 500 });
+    }
+
+    // 2.5 Check database cache first if not forcing a sync
+    let cachedData = null;
+    if (!forceSync) {
+      try {
+        const { data, error } = await supabase
+          .from('portal_logs_cache')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (!error && data) {
+          cachedData = data;
+        }
+      } catch (cacheErr) {
+        console.warn('Failed to query portal_logs_cache table:', cacheErr);
+      }
+    }
+
+    if (cachedData) {
+      const cacheAgeMs = Date.now() - new Date(cachedData.updated_at).getTime();
+      const cacheExpiryMs = 10 * 60 * 1000; // 10 minutes cache expiry
+      if (cacheAgeMs < cacheExpiryMs) {
+        console.log(`[Portal Logs Cache Hit] Returning cached logs for user ${user.id} (Age: ${Math.round(cacheAgeMs/1000)}s)`);
+        return NextResponse.json({ success: true, logs: cachedData.logs, cached: true });
+      }
     }
 
     // 3. Connect to Browserless or local browser (Bypass remote service in local development to avoid IP block/geo-restrictions on corporate portal)
@@ -469,6 +496,20 @@ export async function GET(request: NextRequest) {
       console.log('Successfully saved scraped logs to diagnostic file.');
     } catch (fsErr) {
       console.error('Failed to save diagnostic logs:', fsErr);
+    }
+
+    // Write/Update Cache in database
+    try {
+      await supabase
+        .from('portal_logs_cache')
+        .upsert({
+          user_id: user.id,
+          logs: parsedLogs,
+          updated_at: new Date().toISOString()
+        });
+      console.log(`[Portal Logs Cache Write] Updated cache for user ${user.id}`);
+    } catch (cacheWriteErr) {
+      console.error('Error writing to portal_logs_cache:', cacheWriteErr);
     }
 
     return NextResponse.json({

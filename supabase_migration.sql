@@ -123,3 +123,35 @@ CREATE POLICY "Users can create their own timelog history"
     FOR INSERT 
     WITH CHECK (auth.uid() = user_id);
 
+-- 6. Create portal_logs_cache table to speed up dashboard loads
+CREATE TABLE IF NOT EXISTS public.portal_logs_cache (
+    user_id UUID REFERENCES public.user_profiles(id) ON DELETE CASCADE PRIMARY KEY,
+    logs JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- Enable RLS
+ALTER TABLE public.portal_logs_cache ENABLE ROW LEVEL SECURITY;
+
+-- Select policy
+DROP POLICY IF EXISTS "Users can view their own portal logs cache" ON public.portal_logs_cache;
+CREATE POLICY "Users can view their own portal logs cache" 
+    ON public.portal_logs_cache 
+    FOR SELECT 
+    USING (auth.uid() = user_id);
+
+-- Insert policy
+DROP POLICY IF EXISTS "Users can insert their own portal logs cache" ON public.portal_logs_cache;
+CREATE POLICY "Users can insert their own portal logs cache" 
+    ON public.portal_logs_cache 
+    FOR INSERT 
+    WITH CHECK (auth.uid() = user_id);
+
+-- Update policy
+DROP POLICY IF EXISTS "Users can update their own portal logs cache" ON public.portal_logs_cache;
+CREATE POLICY "Users can update their own portal logs cache" 
+    ON public.portal_logs_cache 
+    FOR UPDATE 
+    USING (auth.uid() = user_id);
+
+
