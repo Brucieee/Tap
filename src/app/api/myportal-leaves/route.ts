@@ -31,7 +31,7 @@ async function getBrowserInstance() {
     }
 
     console.log('Connecting to remote Playwright service for MyPortal...');
-    const maxConnRetries = 12;
+    const maxConnRetries = 3;
     let connAttempt = 0;
     let connSuccess = false;
 

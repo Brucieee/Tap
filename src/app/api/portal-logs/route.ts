@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
       }
 
       console.log('Connecting to remote Playwright service for scraper...');
-      const maxConnRetries = 12; // Wait up to 30 seconds for concurrent slots to open up
+      const maxConnRetries = 3; // Fast retry
       let connAttempt = 0;
       let connSuccess = false;
       
