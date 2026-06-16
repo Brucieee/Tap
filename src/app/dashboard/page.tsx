@@ -290,10 +290,10 @@ export default function DashboardPage() {
     }, 6000);
   };
 
-  const fetchMyPortalLeaves = async () => {
+  const fetchMyPortalLeaves = async (force = false) => {
     setLoadingMyPortalLeaves(true);
     try {
-      const res = await fetch('/api/myportal-leaves');
+      const res = await fetch('/api/myportal-leaves' + (force ? '?force=true' : ''));
       if (res.ok) {
         const data = await res.json();
         setMyPortalLeaves(data.leaves || []);
@@ -713,6 +713,10 @@ export default function DashboardPage() {
   const handleSyncPortalLogs = async (currentWfhDays?: string[], isAutomationEnabled?: boolean, attempt = 1, force = false) => {
     setLoadingPortalLogs(true);
     setSyncError(attempt > 1 ? `Retrying portal sync (Attempt ${attempt}/3)...` : '');
+    
+    if (force && attempt === 1) {
+      fetchMyPortalLeaves(true);
+    }
     
     try {
       const response = await fetch('/api/portal-logs' + (force ? '?force=true' : ''));

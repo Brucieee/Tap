@@ -117,6 +117,9 @@ export async function GET(request: NextRequest) {
   let context: any = null;
 
   try {
+    const { searchParams } = new URL(request.url);
+    const forceSync = searchParams.get('force') === 'true';
+
     // 1. Authenticate Tap User Session
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -147,6 +150,32 @@ export async function GET(request: NextRequest) {
 
     if (!decryptedEmployeeId || !decryptedPassword) {
       return NextResponse.json({ error: 'Failed to decrypt MyPortal credentials.' }, { status: 500 });
+    }
+
+    // 2.5 Check database cache first if not forcing a sync
+    let cachedData = null;
+    if (!forceSync) {
+      try {
+        const { data, error } = await supabase
+          .from('myportal_leaves_cache')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (!error && data) {
+          cachedData = data;
+        }
+      } catch (cacheErr) {
+        console.warn('Failed to query myportal_leaves_cache table:', cacheErr);
+      }
+    }
+
+    if (cachedData) {
+      const cacheAgeMs = Date.now() - new Date(cachedData.updated_at).getTime();
+      const cacheExpiryMs = 15 * 60 * 1000; // 15 minutes cache expiry
+      if (cacheAgeMs < cacheExpiryMs) {
+        console.log('Serving MyPortal leaves from database cache (age:', Math.round(cacheAgeMs / 1000), 'seconds)...');
+        return NextResponse.json({ leaves: cachedData.leaves, cached: true });
+      }
     }
 
     // 3. Launch browser and Login
@@ -265,6 +294,20 @@ export async function GET(request: NextRequest) {
         startDate: convertDate(startDateRaw),
         endDate: convertDate(endDateRaw),
       });
+    }
+
+    // 6.5 Update database cache
+    try {
+      await supabase
+        .from('myportal_leaves_cache')
+        .upsert({
+          user_id: user.id,
+          leaves: leavesList,
+          updated_at: new Date().toISOString()
+        });
+      console.log('Successfully updated myportal_leaves_cache for user:', user.id);
+    } catch (cacheErr) {
+      console.warn('Failed to update myportal_leaves_cache:', cacheErr);
     }
 
     await browser.close();
@@ -493,15 +536,15 @@ export async function POST(request: NextRequest) {
     // Close browser
     await browser.close();
 
-    // Invalidate the portal logs cache so fresh data is loaded next time
+    // Invalidate the portal logs cache and myportal leaves cache so fresh data is loaded next time
     try {
-      await supabase
-        .from('portal_logs_cache')
-        .delete()
-        .eq('user_id', user.id);
-      console.log(`[Cache Invalidation] Cleared portal logs cache for user ${user.id} due to leave filing`);
+      await Promise.all([
+        supabase.from('portal_logs_cache').delete().eq('user_id', user.id),
+        supabase.from('myportal_leaves_cache').delete().eq('user_id', user.id)
+      ]);
+      console.log(`[Cache Invalidation] Cleared portal logs and leaves cache for user ${user.id} due to leave filing`);
     } catch (cacheErr) {
-      console.warn('Failed to clear portal_logs_cache:', cacheErr);
+      console.warn('Failed to clear caches:', cacheErr);
     }
 
     return NextResponse.json({ success: true, message: 'Leave request filed successfully on MyPortal.' });
@@ -626,15 +669,15 @@ export async function DELETE(request: NextRequest) {
 
     await browser.close();
 
-    // Invalidate the portal logs cache so fresh data is loaded next time
+    // Invalidate the portal logs cache and myportal leaves cache so fresh data is loaded next time
     try {
-      await supabase
-        .from('portal_logs_cache')
-        .delete()
-        .eq('user_id', user.id);
-      console.log(`[Cache Invalidation] Cleared portal logs cache for user ${user.id} due to leave deletion`);
+      await Promise.all([
+        supabase.from('portal_logs_cache').delete().eq('user_id', user.id),
+        supabase.from('myportal_leaves_cache').delete().eq('user_id', user.id)
+      ]);
+      console.log(`[Cache Invalidation] Cleared portal logs and leaves cache for user ${user.id} due to leave deletion`);
     } catch (cacheErr) {
-      console.warn('Failed to clear portal_logs_cache:', cacheErr);
+      console.warn('Failed to clear caches:', cacheErr);
     }
 
     return NextResponse.json({ success: true, message: `Leave request ${docNo} deleted successfully from MyPortal.` });
