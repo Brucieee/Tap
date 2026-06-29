@@ -228,28 +228,42 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
     let dbError;
 
     if (isUserSession) {
-      // Manual/Sandbox run: Fetch only the targeted profile
+      // Manual/Sandbox run: Fetch targeted profile or all profiles if requested by admin
       const targetUserId = searchParams.get('userId');
       const { data: { user } } = await supabase.auth.getUser();
       
-      let fetchId = user?.id;
-      
-      if (targetUserId) {
+      if (targetUserId === 'all') {
         // Verify admin
         const { data: adminProfile } = await supabase.from('user_profiles').select('role').eq('id', user?.id).single();
         if (adminProfile?.role === 'admin') {
-          fetchId = targetUserId;
+          const { data, error } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('is_automation_enabled', true);
+          profiles = data;
+          dbError = error;
         } else {
-          return NextResponse.json({ error: 'Forbidden. Admin privileges required to trigger for another user.' }, { status: 403 });
+          return NextResponse.json({ error: 'Forbidden. Admin privileges required to trigger for all users.' }, { status: 403 });
         }
-      }
+      } else {
+        let fetchId = user?.id;
+        if (targetUserId) {
+          // Verify admin
+          const { data: adminProfile } = await supabase.from('user_profiles').select('role').eq('id', user?.id).single();
+          if (adminProfile?.role === 'admin') {
+            fetchId = targetUserId;
+          } else {
+            return NextResponse.json({ error: 'Forbidden. Admin privileges required to trigger for another user.' }, { status: 403 });
+          }
+        }
 
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', fetchId);
-      profiles = data;
-      dbError = error;
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', fetchId);
+        profiles = data;
+        dbError = error;
+      }
     } else {
       // Automated Cron Job: Fetch active profiles (allow targeting a specific userId if provided)
       const targetUserId = searchParams.get('userId');
@@ -258,7 +272,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
         .select('*')
         .eq('is_automation_enabled', true);
       
-      if (targetUserId) {
+      if (targetUserId && targetUserId !== 'all') {
         query = query.eq('id', targetUserId);
       }
       

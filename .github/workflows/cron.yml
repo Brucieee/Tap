@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Dynamic Hourly Timelog
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          TAP_API_URL: ${{ secrets.TAP_API_URL || 'https://tap-attendance.vercel.app' }}
         run: |
-          # Replace the URL below with your actual production Vercel URL if it is different
-          curl -s -f "https://tap-attendance.vercel.app/api/cron/run-timelog?schedule=hourly" || echo "Trigger sent."
+          curl -s -f -H "Authorization: Bearer $CRON_SECRET" "$TAP_API_URL/api/cron/run-timelog?schedule=hourly"

@@ -1116,7 +1116,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleManualTrigger = async (mode: 'login' | 'logout') => {
+  const handleManualTrigger = async (mode: 'login' | 'logout', forAllUsers = false) => {
     const modeText = mode === 'login' ? 'Log In' : 'Log Out';
     setTriggeringManualLog(mode);
     setMessage({ text: '', type: '' });
@@ -1134,16 +1134,20 @@ export default function DashboardPage() {
       displayDate = parsedDate.toLocaleDateString();
     }
     
-    addToast(`Manual ${modeText} Triggered`, `Manually triggering time ${mode === 'login' ? 'In' : 'Out'} for ${displayDate}...`, displayDate, 'info');
+    const triggerLabel = forAllUsers ? `Manual ${modeText} (All Users)` : `Manual ${modeText}`;
+    addToast(triggerLabel, `Triggering time ${mode === 'login' ? 'In' : 'Out'} for ${displayDate}...`, displayDate, 'info');
     
     setActiveConsoleLogs([{ 
       status: 'info', 
-      message: `Initializing manual ${mode} override sequence on date: ${displayDate}...` 
+      message: `Initializing manual ${mode} override sequence ${forAllUsers ? 'for all users' : ''} on date: ${displayDate}...` 
     }]);
     setShowConsole(true);
     
     try {
       let url = `/api/cron/run-timelog?mode=${mode}&test=true&stream=true${customDateQuery}`;
+      if (forAllUsers) {
+        url += '&userId=all';
+      }
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP network error! Status: ${response.status}`);
@@ -1176,23 +1180,35 @@ export default function DashboardPage() {
               
               if (logData.status === 'final') {
                 const finalData = logData.data;
-                const myResult = finalData.results && finalData.results.length > 0 ? finalData.results[0] : null;
                 
-                if (myResult && myResult.status === 'success') {
-                  setMessage({ text: `Successfully triggered ${mode === 'login' ? 'Log In' : 'Log Out'}!`, type: 'success' });
-                  addToast(`Manual ${modeText} Succeeded`, `Successfully manually timed ${mode === 'login' ? 'In' : 'Out'} for ${displayDate}!`, displayDate, 'success');
-                  setActiveConsoleLogs(prev => [...prev, { status: 'success', message: `Manual trigger finished successfully. Mode: ${modeText}` }]);
-                  handleSyncPortalLogs();
-                } else if (myResult && myResult.status === 'skipped') {
-                  setMessage({ text: myResult.message || `Skipped manual ${mode}.`, type: 'success' });
-                  addToast(`Manual ${modeText} Skipped`, myResult.message || `Skipped manual time ${mode === 'login' ? 'In' : 'Out'}.`, displayDate, 'info');
-                  setActiveConsoleLogs(prev => [...prev, { status: 'warn', message: myResult.message || `Manual run skipped.` }]);
+                if (forAllUsers) {
+                  const summary = finalData.summary || { success: 0, failed: 0, skipped: 0 };
+                  const msgText = `Completed for all users. Success: ${summary.success}, Failed: ${summary.failed}, Skipped: ${summary.skipped}`;
+                  const isError = summary.failed > 0 && summary.success === 0;
+                  
+                  setMessage({ text: msgText, type: isError ? 'error' : 'success' });
+                  addToast(`Admin ${modeText} Finished`, msgText, displayDate, isError ? 'failed' : 'success');
+                  setActiveConsoleLogs(prev => [...prev, { status: isError ? 'error' : 'success', message: msgText }]);
                   handleSyncPortalLogs();
                 } else {
-                  const errorMsg = myResult?.message || finalData.error || 'Unknown error';
-                  setMessage({ text: `Failed to trigger ${mode}: ${errorMsg}`, type: 'error' });
-                  addToast(`Manual ${modeText} Failed`, `Failed manual time ${mode === 'login' ? 'In' : 'Out'}: ${errorMsg}`, displayDate, 'failed');
-                  setActiveConsoleLogs(prev => [...prev, { status: 'error', message: `Execution failed: ${errorMsg}` }]);
+                  const myResult = finalData.results && finalData.results.length > 0 ? finalData.results[0] : null;
+                  
+                  if (myResult && myResult.status === 'success') {
+                    setMessage({ text: `Successfully triggered ${mode === 'login' ? 'Log In' : 'Log Out'}!`, type: 'success' });
+                    addToast(`Manual ${modeText} Succeeded`, `Successfully manually timed ${mode === 'login' ? 'In' : 'Out'} for ${displayDate}!`, displayDate, 'success');
+                    setActiveConsoleLogs(prev => [...prev, { status: 'success', message: `Manual trigger finished successfully. Mode: ${modeText}` }]);
+                    handleSyncPortalLogs();
+                  } else if (myResult && myResult.status === 'skipped') {
+                    setMessage({ text: myResult.message || `Skipped manual ${mode}.`, type: 'success' });
+                    addToast(`Manual ${modeText} Skipped`, myResult.message || `Skipped manual time ${mode === 'login' ? 'In' : 'Out'}.`, displayDate, 'info');
+                    setActiveConsoleLogs(prev => [...prev, { status: 'warn', message: myResult.message || `Manual run skipped.` }]);
+                    handleSyncPortalLogs();
+                  } else {
+                    const errorMsg = myResult?.message || finalData.error || 'Unknown error';
+                    setMessage({ text: `Failed to trigger ${mode}: ${errorMsg}`, type: 'error' });
+                    addToast(`Manual ${modeText} Failed`, `Failed manual time ${mode === 'login' ? 'In' : 'Out'}: ${errorMsg}`, displayDate, 'failed');
+                    setActiveConsoleLogs(prev => [...prev, { status: 'error', message: `Execution failed: ${errorMsg}` }]);
+                  }
                 }
               } else {
                 setActiveConsoleLogs(prev => [...prev, { status: logData.status, message: logData.message }]);
@@ -1632,7 +1648,69 @@ export default function DashboardPage() {
                 </button>
               </div>
 
+              {/* Admin Manual Control Panel */}
+              <div className="ui-card" style={{
+                maxWidth: '100%',
+                padding: '2.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1.5rem',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+                  <ShieldCheck style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
+                    Admin Manual Trigger (All Users)
+                  </h3>
+                </div>
 
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0, lineHeight: '1.4' }}>
+                  Manually trigger automated check-in or check-out for **all active automated users** at once. Note: This will bypass standard WFH schedule checks.
+                </p>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date:</span>
+                    <input
+                      type="date"
+                      value={manualDate}
+                      onChange={(e) => setManualDate(e.target.value)}
+                      style={{
+                        padding: '0.4rem 0.75rem',
+                        fontSize: '0.75rem',
+                        borderRadius: '999px',
+                        border: '1px solid #cbd5e1',
+                        color: 'var(--brand-navy)',
+                        outline: 'none',
+                        background: '#ffffff',
+                        fontFamily: 'inherit',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => handleManualTrigger('login', true)}
+                      disabled={triggeringManualLog !== null}
+                      className="btn-ui-secondary"
+                      style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f8fafc', borderColor: '#e2e8f0', color: 'var(--brand-navy)', width: 'auto', cursor: 'pointer' }}
+                    >
+                      {triggeringManualLog === 'login' ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1.5s linear infinite' }} /> : <Play style={{ width: '14px', height: '14px' }} />}
+                      Log In All Users
+                    </button>
+                    <button
+                      onClick={() => handleManualTrigger('logout', true)}
+                      disabled={triggeringManualLog !== null}
+                      className="btn-ui-secondary"
+                      style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f8fafc', borderColor: '#e2e8f0', color: 'var(--brand-navy)', width: 'auto', cursor: 'pointer' }}
+                    >
+                      {triggeringManualLog === 'logout' ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1.5s linear infinite' }} /> : <Power style={{ width: '14px', height: '14px' }} />}
+                      Log Out All Users
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               {/* Company Events panel inside Admin Workspace */}
               <div className="ui-card" style={{
