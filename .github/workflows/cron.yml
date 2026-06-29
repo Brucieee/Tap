@@ -13,6 +13,6 @@ jobs:
       - name: Trigger Dynamic Hourly Timelog
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          TAP_API_URL: ${{ secrets.TAP_API_URL || 'https://tap-attendance.vercel.app' }}
+          TAP_API_URL: ${{ secrets.TAP_API_URL || 'https://tap-timelog.vercel.app' }}
         run: |
           curl -s -f -H "Authorization: Bearer $CRON_SECRET" "$TAP_API_URL/api/cron/run-timelog?schedule=hourly"
