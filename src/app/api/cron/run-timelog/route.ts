@@ -8,7 +8,7 @@ import { AsyncLocalStorage } from 'async_hooks';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // Extend serverless execution duration up to 300 seconds (5 minutes)
 
-const logStorage = new AsyncLocalStorage<{
+export const logStorage = new AsyncLocalStorage<{
   log: (msg: string, status: 'info' | 'success' | 'warn' | 'error') => void;
 }>();
 
@@ -477,13 +477,39 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
         });
       }
 
+      // Fetch today's history for this user to check what has already been submitted
+      let userHistory: any[] = [];
+      try {
+        const { data: dbLogs, error: dbLogError } = await supabase
+          .from('timelog_history')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('date', currentDate);
+        
+        if (dbLogError) {
+          console.warn(`[Database History Check Warning] Failed to query timelog_history for user ${userId}:`, dbLogError.message);
+        } else if (dbLogs) {
+          userHistory = dbLogs;
+        }
+      } catch (err: any) {
+        console.warn(`[Database History Check Exception] Gracefully falling back to empty history:`, err.message);
+      }
+
       // Resolve the active action for this request
       const isHourlySchedule = searchParams.get('schedule') === 'hourly';
       let matchedAction: ScheduledAction | undefined = undefined;
       
       if (isHourlySchedule && !isManualTest) {
-        // Find scheduled action for the current hour
-        matchedAction = scheduledActions.find(act => act.hour === currentPhtHour);
+        // Find all scheduled actions whose hour has arrived or passed
+        const eligibleActions = scheduledActions.filter(act => act.hour <= currentPhtHour);
+        // Exclude actions that are already recorded in DB history
+        const pendingActions = eligibleActions.filter(act => !userHistory.some(h => h.mode === act.mode));
+        
+        if (pendingActions.length > 0) {
+          // Sort ascending to execute the earliest unsubmitted action first
+          pendingActions.sort((a, b) => a.hour - b.hour);
+          matchedAction = pendingActions[0];
+        }
       } else {
         // Manual/Sandbox run: match by requested modeParam
         matchedAction = scheduledActions.find(act => act.mode === modeParam);
@@ -494,7 +520,7 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
         if (activeLeave && scheduledActions.length === 0) {
           skipMsg = `Skipped: User is on full-day leave today (${leaveDescription}).`;
         } else if (isHourlySchedule && !isManualTest) {
-          skipMsg = `Skipped: No scheduled action matches the current PHT hour (${currentPhtHour}). Scheduled today: ${scheduledActions.map(a => `${a.mode} at ${a.time}`).join(', ')}`;
+          skipMsg = `Skipped: All scheduled actions up to current hour (${currentPhtHour}) have been submitted or none configured. Scheduled today: ${scheduledActions.map(a => `${a.mode} at ${a.time}`).join(', ')}`;
         } else {
           skipMsg = `Skipped: Requested mode "${modeParam}" is not scheduled today due to leave or schedule constraints. Scheduled today: ${scheduledActions.map(a => `${a.mode} at ${a.time}`).join(', ')}`;
         }
@@ -554,20 +580,10 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
 
       let hasManualLoginToday = false;
       if (resolvedMode === 'logout') {
-        try {
-          const { data: todayLogin } = await supabase
-            .from('timelog_history')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('date', currentDate)
-            .eq('mode', 'login')
-            .limit(1);
-          if (todayLogin && todayLogin.length > 0) {
-            hasManualLoginToday = true;
-            console.log(`[Profile Evaluation] User ${userId}: Found active morning login in history for today (${currentDate}). Forcing auto-logout execution despite today being an Office day.`);
-          }
-        } catch (err) {
-          console.error(`[Profile Evaluation] User ${userId}: Failed to check login history:`, err);
+        const todayLogin = userHistory.find(h => h.mode === 'login');
+        if (todayLogin) {
+          hasManualLoginToday = true;
+          console.log(`[Profile Evaluation] User ${userId}: Found active morning login in history for today (${currentDate}). Forcing auto-logout execution despite today being an Office day.`);
         }
       }
 
@@ -581,30 +597,17 @@ async function runTimelogFlow(request: NextRequest, searchParams: URLSearchParam
         };
       }
 
-      // Check database for existing successful submission today
-      try {
-        const { data: dbLog, error: dbLogError } = await supabase
-          .from('timelog_history')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('date', currentDate)
-          .eq('mode', resolvedMode)
-          .limit(1);
-
-        if (dbLogError) {
-          console.warn(`[Database History Check Warning] Failed to query timelog_history for user ${userId}:`, dbLogError.message);
-        } else if (!isManualTest && dbLog && dbLog.length > 0) {
-          const skipMsg = `Skipped: Today's ${resolvedModeText} timelog already exists in Tap database history (submitted at ${dbLog[0].created_at}).`;
-          console.log(`[Database History Check] ${skipMsg}`);
-          return {
-            userId,
-            employeeId: decryptedEmployeeId,
-            status: 'skipped' as const,
-            message: skipMsg
-          };
-        }
-      } catch (err: any) {
-        console.warn(`[Database History Check Exception] Gracefully falling back to browser scraping check:`, err.message);
+      // Check database for existing successful submission today using cached userHistory
+      const existingDbLog = userHistory.find(h => h.mode === resolvedMode);
+      if (!isManualTest && existingDbLog) {
+        const skipMsg = `Skipped: Today's ${resolvedModeText} timelog already exists in Tap database history (submitted at ${existingDbLog.created_at}).`;
+        console.log(`[Database History Check] ${skipMsg}`);
+        return {
+          userId,
+          employeeId: decryptedEmployeeId,
+          status: 'skipped' as const,
+          message: skipMsg
+        };
       }
 
       // Execute Playwright flow in isolation for this user with automatic self-healing retries

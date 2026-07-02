@@ -2,8 +2,8 @@ name: Hourly Timelog Trigger
 
 on:
   schedule:
-    # Trigger at the 5th minute of every hour, Monday through Friday, 24 hours a day to support any schedule slot (including night shifts).
-    - cron: '5 * * * 1-5'
+    # Trigger at the 5th minute of every hour, Sunday through Friday, 24 hours a day to support any schedule slot (including night shifts).
+    - cron: '5 * * * 0-5'
   workflow_dispatch: # Allows manual trigger from GitHub UI if needed
 
 jobs:

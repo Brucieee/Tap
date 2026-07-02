@@ -24,6 +24,12 @@ export default function LogsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
+  // Recovery modal state variables
+  const [isRecoveryOpen, setIsRecoveryOpen] = useState(false);
+  const [recoveryDate, setRecoveryDate] = useState(filterDate || getLocalDateString());
+  const [recoveryLogs, setRecoveryLogs] = useState<string[]>([]);
+  const [isRecovering, setIsRecovering] = useState(false);
+
   const handleDeleteLog = async (id: string) => {
     if (!confirm('Are you sure you want to delete this log entry?')) {
       return;
@@ -68,32 +74,75 @@ export default function LogsPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  useEffect(() => {
-    const fetchLogs = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/login');
-        return;
-      }
+  const fetchLogs = async (silent = false) => {
+    if (!silent) setLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      router.push('/login');
+      return;
+    }
 
+    try {
+      const response = await fetch('/api/logs');
+      if (response.ok) {
+        const data = await response.json();
+        setLogs(data);
+      } else {
+        const err = await response.json();
+        setError(err.error || 'Failed to fetch logs.');
+      }
+    } catch (err) {
+      setError('An unexpected error occurred.');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, [router, supabase]);
+
+  const startRecovery = () => {
+    if (!recoveryDate) {
+      alert('Please select a valid date for recovery.');
+      return;
+    }
+    setIsRecovering(true);
+    setRecoveryLogs(['[System] Initializing recovery scan...', `[System] Target Date: ${recoveryDate}`]);
+
+    const eventSource = new EventSource(`/api/admin/recover?date=${recoveryDate}&stream=true`);
+
+    eventSource.onmessage = (event) => {
       try {
-        const response = await fetch('/api/logs');
-        if (response.ok) {
-          const data = await response.json();
-          setLogs(data);
+        const data = JSON.parse(event.data);
+        if (data.status === 'final') {
+          setRecoveryLogs(prev => [
+            ...prev,
+            `[System] SCAN COMPLETED!`,
+            `[Summary] Total: ${data.data.summary.total} | Success: ${data.data.summary.success} | Failed: ${data.data.summary.failed} | Skipped: ${data.data.summary.skipped}`
+          ]);
+          setIsRecovering(false);
+          eventSource.close();
+          fetchLogs(true); // Silent update of list logs
+        } else if (data.status === 'error') {
+          setRecoveryLogs(prev => [...prev, `[Error] ${data.message}`]);
+          setIsRecovering(false);
+          eventSource.close();
         } else {
-          const err = await response.json();
-          setError(err.error || 'Failed to fetch logs.');
+          const prefix = data.status === 'info' ? '' : `[${data.status.toUpperCase()}] `;
+          setRecoveryLogs(prev => [...prev, `${prefix}${data.message}`]);
         }
       } catch (err) {
-        setError('An unexpected error occurred.');
-      } finally {
-        setLoading(false);
+        setRecoveryLogs(prev => [...prev, `[Parsing Error] Raw chunk: ${event.data}`]);
       }
     };
 
-    fetchLogs();
-  }, [router, supabase]);
+    eventSource.onerror = (err) => {
+      setRecoveryLogs(prev => [...prev, `[Connection Error] SSE stream interrupted or disconnected.`]);
+      setIsRecovering(false);
+      eventSource.close();
+    };
+  };
 
   if (loading) {
     return (
@@ -148,11 +197,45 @@ export default function LogsPage() {
 
         <div className="ui-card" style={{ maxWidth: '100%', padding: '2.25rem', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Clock style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
-                System Logs
-              </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Clock style={{ width: '20px', height: '20px', color: 'var(--brand-navy)' }} />
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-title)', color: 'var(--brand-navy)', margin: 0 }}>
+                  System Logs
+                </h2>
+              </div>
+              <button
+                onClick={() => {
+                  setRecoveryDate(filterDate || getLocalDateString());
+                  setIsRecoveryOpen(true);
+                }}
+                className="btn-ui-primary"
+                style={{
+                  borderRadius: '999px',
+                  padding: '0.35rem 1rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  background: 'linear-gradient(135deg, var(--brand-navy) 0%, var(--accent-blue) 100%)',
+                  border: 'none',
+                  color: 'white',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                  transition: 'transform 0.2s, box-shadow 0.2s'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                }}
+              >
+                Recover Logs
+              </button>
             </div>
             
             {/* Filter and Sort Controls */}
@@ -430,6 +513,223 @@ export default function LogsPage() {
           )}
         </div>
       </main>
+
+      {isRecoveryOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '1.5rem'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            maxWidth: '750px',
+            width: '100%',
+            borderRadius: '16px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #e2e8f0',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            maxHeight: '85vh'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '1.5rem',
+              borderBottom: '1px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+              color: '#ffffff'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Clock style={{ width: '22px', height: '22px', color: '#38bdf8' }} />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, fontFamily: 'var(--font-title)' }}>
+                  Manual Logs Recovery
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  if (!isRecovering) setIsRecoveryOpen(false);
+                }}
+                disabled={isRecovering}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  fontSize: '1.5rem',
+                  cursor: isRecovering ? 'not-allowed' : 'pointer',
+                  opacity: isRecovering ? 0.4 : 1,
+                  lineHeight: 1
+                }}
+                title="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto' }}>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#475569', lineHeight: 1.5 }}>
+                Select a target date to scan all users. The recovery engine will check leaves, holiday definitions, and WFH schedules, then run automated Playwright tasks to fill in any missing login/logout entries on the company portal.
+              </p>
+
+              {/* Date Selector Row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>
+                    Target Date
+                  </label>
+                  <input
+                    type="date"
+                    value={recoveryDate}
+                    onChange={(e) => setRecoveryDate(e.target.value)}
+                    disabled={isRecovering}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                      color: 'var(--brand-navy)',
+                      outline: 'none',
+                      cursor: isRecovering ? 'not-allowed' : 'pointer',
+                      opacity: isRecovering ? 0.7 : 1
+                    }}
+                  />
+                </div>
+
+                <button
+                  onClick={startRecovery}
+                  disabled={isRecovering}
+                  className="btn-ui-primary"
+                  style={{
+                    alignSelf: 'flex-end',
+                    padding: '0.55rem 1.5rem',
+                    fontSize: '0.9rem',
+                    fontWeight: 600,
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    cursor: isRecovering ? 'not-allowed' : 'pointer',
+                    opacity: isRecovering ? 0.7 : 1
+                  }}
+                >
+                  {isRecovering ? (
+                    <>
+                      <Loader2 style={{ animation: 'spin 1.5s linear infinite', width: '16px', height: '16px' }} />
+                      Recovering...
+                    </>
+                  ) : (
+                    'Start Recovery'
+                  )}
+                </button>
+              </div>
+
+              {/* Dark Console Logs Terminal */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>
+                    Execution Console Output
+                  </span>
+                  {recoveryLogs.length > 0 && (
+                    <button
+                      onClick={() => setRecoveryLogs([])}
+                      disabled={isRecovering}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--accent-blue)',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        opacity: isRecovering ? 0.5 : 1
+                      }}
+                    >
+                      Clear Log
+                    </button>
+                  )}
+                </div>
+                
+                <div style={{
+                  backgroundColor: '#0f172a',
+                  color: '#38bdf8',
+                  fontFamily: 'Consolas, Monaco, monospace',
+                  fontSize: '0.825rem',
+                  padding: '1.25rem',
+                  borderRadius: '12px',
+                  height: '280px',
+                  overflowY: 'auto',
+                  border: '1px solid #1e293b',
+                  boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.6)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.35rem'
+                }}>
+                  {recoveryLogs.length === 0 ? (
+                    <span style={{ color: '#64748b', fontStyle: 'italic' }}>Terminal idle. Select date and click Start Recovery.</span>
+                  ) : (
+                    recoveryLogs.map((log, idx) => {
+                      let color = '#38bdf8'; // info
+                      if (log.startsWith('[Error]') || log.startsWith('[FAILED]')) color = '#f87171'; // red
+                      if (log.startsWith('[Success]') || log.startsWith('[SUCCESS]') || log.includes('SCAN COMPLETED')) color = '#4ade80'; // green
+                      if (log.startsWith('[WARN]') || log.startsWith('[Warning]')) color = '#fbbf24'; // yellow
+                      if (log.startsWith('[System]')) color = '#c084fc'; // purple
+                      return (
+                        <div key={idx} style={{ color, wordBreak: 'break-all', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                          {log}
+                        </div>
+                      );
+                    })
+                  )}
+                  {/* Dummy div to scroll to bottom */}
+                  <div ref={(el) => {
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '1rem 1.5rem',
+              backgroundColor: '#f8fafc',
+              borderTop: '1px solid #e2e8f0',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '0.75rem'
+            }}>
+              <button
+                onClick={() => {
+                  setIsRecoveryOpen(false);
+                }}
+                disabled={isRecovering}
+                className="btn-ui-secondary"
+                style={{
+                  borderRadius: '8px',
+                  padding: '0.5rem 1.25rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: isRecovering ? 'not-allowed' : 'pointer',
+                  opacity: isRecovering ? 0.5 : 1
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
